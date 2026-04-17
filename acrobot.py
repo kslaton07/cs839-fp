@@ -461,3 +461,38 @@ def rk4(derivs, y0, t):
         yout[i + 1] = y0 + dt / 6.0 * (k1 + 2 * k2 + 2 * k3 + k4)
     # We only care about the final timestep and we cleave off action value which will be zero
     return yout[-1][:4]
+
+def feuler(derivs, y0, t):
+    """
+    Integrate 1-D or N-D system of ODEs using Euler's method.
+    """
+    yout = np.zeros((len(t), len(y0)))
+    yout[0] = y0
+    for i in np.arange(len(t) - 1):
+        this = t[i]
+        dt = t[i + 1] - this
+        yout[i + 1] = yout[i] + dt * derivs(yout[i])
+    return yout[-1][:4]
+
+def seuler(derivs, y0, t):
+    """
+    Integrate 1-D or N-D system of ODEs using semi-implicit Euler's method.
+    """
+    yout = np.zeros((len(t), len(y0)))
+    yout[0] = y0
+
+    for i in np.arange(len(t) - 1):
+        dt = t[i + 1] - t[i]
+
+        y = yout[i]
+        derivatives = derivs(y)
+
+        acc = derivatives[2:4]
+        vel = y[2:4] + dt * acc
+        pos = y[:2] + dt * vel
+
+        torque = y[-1]  # keep input constant
+
+        yout[i + 1] = np.concatenate([pos, vel, [torque]])
+
+    return yout[-1][:4]
