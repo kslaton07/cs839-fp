@@ -170,7 +170,7 @@ class AcrobotEnv(Env):
     domain_fig = None
     actions_num = 3
 
-    def __init__(self, render_mode: str | None = None):
+    def __init__(self, integrator, dt, render_mode: str | None = None):
         self.render_mode = render_mode
         self.screen = None
         self.clock = None
@@ -182,7 +182,8 @@ class AcrobotEnv(Env):
         self.observation_space = spaces.Box(low=low, high=high, dtype=np.float32)
         self.action_space = spaces.Discrete(3)
         self.state = None
-
+        self.dt = dt
+        self.integrator = integrator
     def reset(self, *, seed: int | None = None, options: dict | None = None):
         super().reset(seed=seed)
         # Note that if you use custom reset bounds, it may lead to out-of-bound
@@ -215,7 +216,7 @@ class AcrobotEnv(Env):
         # _dsdt
         s_augmented = np.append(s, torque)
 
-        ns = rk4(self._dsdt, s_augmented, [0, self.dt])
+        ns = self.integrator(self._dsdt, s_augmented, [0, self.dt])
 
         ns[0] = wrap(ns[0], -pi, pi)
         ns[1] = wrap(ns[1], -pi, pi)
@@ -462,6 +463,33 @@ def rk4(derivs, y0, t):
     # We only care about the final timestep and we cleave off action value which will be zero
     return yout[-1][:4]
 
+def rk2(derivs, y0, t):
+    """
+    Integrate 1-D or N-D system of ODEs using 2nd-order Runge-Kutta (Ralston's method).
+    """
+
+    try:
+        Ny = len(y0)
+    except TypeError:
+        yout = np.zeros((len(t),), np.float64)
+    else:
+        yout = np.zeros((len(t), Ny), np.float64)
+
+    yout[0] = y0
+
+    for i in np.arange(len(t) - 1):
+        dt = t[i + 1] - t[i]
+        dt2 = dt / 2.0
+
+        y = yout[i]
+
+        k1 = np.asarray(derivs(y))
+        k2 = np.asarray(derivs(y + dt2 * k1))
+
+        yout[i + 1] = y + dt * ((1/4) * k1 + (3/4) * k2)
+
+    return yout[-1][:4]
+
 def feuler(derivs, y0, t):
     """
     Integrate 1-D or N-D system of ODEs using Euler's method.
@@ -471,7 +499,7 @@ def feuler(derivs, y0, t):
     for i in np.arange(len(t) - 1):
         this = t[i]
         dt = t[i + 1] - this
-        yout[i + 1] = yout[i] + dt * derivs(yout[i])
+        yout[i + 1] = yout[i] + dt * np.asarray(derivs(yout[i]))
     return yout[-1][:4]
 
 def seuler(derivs, y0, t):
@@ -487,12 +515,55 @@ def seuler(derivs, y0, t):
         y = yout[i]
         derivatives = derivs(y)
 
-        acc = derivatives[2:4]
+        acc = np.asarray(derivatives)[2:4]
         vel = y[2:4] + dt * acc
         pos = y[:2] + dt * vel
 
         torque = y[-1]  # keep input constant
 
         yout[i + 1] = np.concatenate([pos, vel, [torque]])
+
+    return yout[-1][:4]
+
+def ieuler(derivs, y0, t, tol=1e-8, max_iter=10):
+    y0 = np.asarray(y0, dtype=np.float64)
+    Ny = len(y0)
+    yout = np.zeros((len(t), Ny), np.float64)
+    yout[0] = y0
+
+    torque = y0[-1]  # extract once, hold constant throughout
+
+    def derivs4(y4):
+        """Call derivs with the torque dimension re-attached, return only first 4 outputs."""
+        return np.asarray(derivs(np.append(y4, torque)))[:4]
+
+    def numerical_jacobian(f, y, eps=1e-6):
+        n = len(y)
+        J = np.zeros((n, n))
+        f0 = f(y)
+        for j in range(n):
+            yp = y.copy()
+            yp[j] += eps
+            J[:, j] = (f(yp) - f0) / eps
+        return J
+
+    for i in np.arange(len(t) - 1):
+        dt = t[i + 1] - t[i]
+        yn = yout[i][:4]  # work only over physical state
+
+        y_next = yn + dt * derivs4(yn)
+
+        for _ in range(max_iter):
+            f_next = derivs4(y_next)
+            g = y_next - yn - dt * f_next
+
+            if np.linalg.norm(g) < tol:
+                break
+
+            J_g = np.eye(4) - dt * numerical_jacobian(derivs4, y_next)
+            delta = np.linalg.solve(J_g, g)
+            y_next = y_next - delta
+
+        yout[i + 1] = np.append(y_next, torque)  # re-attach torque for storage
 
     return yout[-1][:4]
