@@ -139,9 +139,12 @@ def train_one(integrator_name, dt, seed=SEED):
     # Each episode covers ~50 seconds of simulated time.
     MAX_STEPS = int(50 / dt)
 
-    # Longer exploration = most impactful DQN hyperparameter (per W&B sweep).
-    # *50 gives ~50 max-length episodes of exploration before going greedy.
-    eps_decay = MAX_STEPS * 50
+    # eps_decay: calibrated so exploration decays over ~first third of training.
+    # target_update: must sync many times within budget (~steps = episodes * avg_ep_len).
+    # With short early episodes (~20 steps), 500 eps ≈ only ~10k–50k total env steps,
+    # so both values must be proportional to MAX_STEPS, not some large fixed number.
+    eps_decay    = max(2_500, MAX_STEPS)
+    target_update = max(200, MAX_STEPS // 5)
 
     agent = DQN(
         obs_dim,
@@ -149,15 +152,15 @@ def train_one(integrator_name, dt, seed=SEED):
         lr=3e-4,
         gamma=0.99,
         eps_decay=eps_decay,
-        batch_size=128,
-        target_update=10_000,  # every ~10k env steps; 500 was 100x too frequent
+        batch_size=64,
+        target_update=target_update,
         seed=seed,
     )
 
     replay = ReplayBuffer(capacity=500_000)
 
-    # Collect real buffer diversity before any gradient steps
-    MIN_BUFFER = 5000
+    # 500 transitions is plenty for initial diversity; 5000 wasted ~250 episodes
+    MIN_BUFFER = 500
 
     # Standard DQN-style CartPole debugging: one optimization attempt per step.
     update_every_steps = 1

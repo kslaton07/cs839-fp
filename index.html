@@ -22,7 +22,7 @@
             <a href="#background">Background</a>
             <a href="#motivation">Motivation</a>
             <a href="#methodology">Methodology</a>
-            <a href="#results">Results</a>
+            <a href="#results-dqn-cartpole">Results</a>
             <a href="#future">Future Work</a>
         </div>
     </nav>
@@ -60,32 +60,31 @@
             </p>
         </section>
 
-    <section id="motivation" class="card">
-        <h2>Motivation</h2>
+        <section id="motivation" class="card">
+            <h2>Motivation</h2>
 
-        <p>
-            One day I was having a discussing with a colleague about training agents in simulation in which he had the following opinion: <strong> the agent has
-            no notion of timestep </strong>. More concretely, training the agent in a simulator with a timestep such as \(10^{-3}\) should not, by itself, determine 
-            how the agent behaves during real-world deployment.
-        </p>
+            <p>
+                One day I was having a discussing with a colleague about training agents in simulation in which he had the following opinion: <strong> the agent has
+                no notion of timestep </strong>. More concretely, training the agent in a simulator with a timestep such as \(10^{-3}\) should not, by itself, determine 
+                how the agent behaves during real-world deployment.
+            </p>
 
-        <p>
-            However, as someone with experience in multibody dynamics and simulation, this claim did not sit well with me. Even if timestep is not explicitly embedded in
-            the learning algorithm, there is still an implicit influnce simply because learned behavior is contingent on the environment, and the environment is contingent 
-            on what I refer to as the <strong>simulation configuration</strong>.
-        </p>
+            <p>
+                However, as someone with experience in multibody dynamics and simulation, this claim did not sit well with me. Even if timestep is not explicitly embedded in
+                the learning algorithm, there is still an implicit influnce simply because learned behavior is contingent on the environment, and the environment is contingent 
+                on what I refer to as the <strong>simulation configuration</strong>.
+            </p>
 
-        <p>
-            This simulation configuration refers to both the timestep and numerical integrator. Hence, there is not necessarily a clean separation between learned 
-            agent behavior and timestep. Actually, it is even more complex than initially considered since we must also consider the choice of integrator.
-        </p>
+            <p>
+                This simulation configuration refers to both the timestep and numerical integrator. Hence, there is not necessarily a clean separation between learned 
+                agent behavior and timestep. Actually, it is even more complex than initially considered since we must also consider the choice of integrator.
+            </p>
 
-        <p>
-            Thus, I wanted to take a moment to invesitgate how simulation configuration can effect learned agent behavior, and see what insights I could gather 
-            from my experiments. 
-        </p>
-    </section>
-
+            <p>
+                Thus, I wanted to take a moment to invesitgate how simulation configuration can effect learned agent behavior, and see what insights I could gather 
+                from my experiments. 
+            </p>
+        </section>
 
         <div id="background-rl"></div>
         <div id="background-integrators"></div>
@@ -301,23 +300,10 @@
 
         </section>
 
-        <section id="results" class="card">
-            <h2>Results</h2>
-
-            <p>
-                Add plots, videos, and performance comparisons here.
-            </p>
-        </section>
-
-        <section id="future" class="card">
-            <h2>Future Work</h2>
-
-            <p>
-                Future directions include domain randomization and sim-to-real transfer studies.
-            </p>
-        </section>
-
-    </main>
+        <div id="results-dqn-cartpole"></div>
+        <div id="results-dqn-acrobot"></div>
+        <div id="results-ppo-cartpole"></div>
+        <div id="results-ppo-acrobot"></div>
 
         <section id="future" class="card">
             <h2>Future Work</h2>
@@ -325,9 +311,9 @@
             <p>
                 I did intend on doing a domain randomization inspired training and evaluation, however I saw
                 that people online were able to get cartpole to learn with DQN, thus most of my time was spent
-                trying to get this to work on my end as well.
+                trying to get this to work on my end as well (unfortunately, it still did not work yet).
                 However, I do plan on doing this extension in the near future and updating the webpage accordingly
-                (as well as DQN training working on CartPole).
+                (as well as defeating DQN training with CartPole).
             </p>
 
             <p>
@@ -363,7 +349,6 @@
             </p>
 
         </section>
-        </section>
 
     </main>
 
@@ -382,32 +367,26 @@
     </script>
 
     <script>
-        fetch("HTML/background_rl.html")
-            .then(response => response.text())
-            .then(html => {
-                document.getElementById("background-rl").innerHTML = html;
+        const sections = [
+            { id: "background-rl",          file: "HTML/background_rl.html" },
+            { id: "background-integrators", file: "HTML/background_integrators.html" },
+            { id: "results-dqn-cartpole",   file: "HTML/dqn_cartpole.html" },
+            { id: "results-dqn-acrobot",    file: "HTML/dqn_acrobot.html" },
+            { id: "results-ppo-cartpole",   file: "HTML/ppo_cartpole.html" },
+            { id: "results-ppo-acrobot",    file: "HTML/ppo_acrobot.html" },
+        ];
 
-                if (window.MathJax) {
-                    MathJax.typesetPromise();
-                }
-            });
+        const loads = sections.map(({ id, file }) =>
+            fetch(file)
+                .then(r => r.text())
+                .then(html => { document.getElementById(id).innerHTML = html; })
+                .catch(() => { document.getElementById(id).innerHTML = ""; })
+        );
+
+        Promise.all(loads).then(() => {
+            if (window.MathJax) MathJax.typesetPromise();
+        });
     </script>
-
-        <script>
-        fetch("HTML/background_integrators.html")
-            .then(response => response.text())
-            .then(html => {
-                document.getElementById("background-integrators").innerHTML = html;
-
-                if (window.MathJax) {
-                    MathJax.typesetPromise();
-                }
-            });
-    </script>
-
-</body>
-
-</html>
 
 </body>
 
