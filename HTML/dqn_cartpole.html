@@ -1,7 +1,81 @@
 <section id="results-dqn-cartpole" class="card">
     <h2>Results: DQN on CartPole</h2>
 
+    <h3>Overview</h3>
+
     <p>
-        Add plots and discussion here.
+        DQN did not successfully learn to balance the pole across any integrator or timestep configuration tested.
+        The heatmap below shows final episode return for every integrator and timestep combination.
+        The uniformly poor performance is not a tuning failure specific to one configuration;
+        it reflects a structural mismatch between how DQN learns and what CartPole demands of an agent during training.
     </p>
+
+    <figure>
+        <img
+            src="../DQN/results_cartpole/plots/heatmap_solve.png"
+            alt="Heatmap of DQN final returns on CartPole across all integrator and timestep combinations. All configurations show near-zero return."
+            style="max-width: 100%; border-radius: 8px;"
+        >
+        <figcaption>
+            Final mean episode return for DQN on CartPole across all integrator and timestep configurations.
+            No configuration achieves meaningful performance, confirming that failure is systematic rather than configuration-specific.
+        </figcaption>
+    </figure>
+
+    <h3>Why DQN Struggles on CartPole</h3>
+
+    <p>
+        DQN is an off-policy algorithm that learns by repeatedly sampling past transitions from a replay buffer
+        and fitting a neural network to approximate the action-value function.
+        Its ability to learn depends critically on the quality and diversity of the experience stored in that buffer.
+        CartPole creates a particularly hostile environment for this kind of learning.
+    </p>
+
+    <p>
+        In the early stages of training, before the agent has learned anything useful,
+        nearly every episode terminates almost immediately.
+        Random or near-random actions cause the pole to fall within a handful of steps,
+        which means the replay buffer is filled almost entirely with short, failed trajectories.
+        DQN then trains on this buffer repeatedly, receiving a signal that says little more than
+        "most actions in most states lead quickly to failure," with no counterexamples of sustained balance to learn from.
+    </p>
+
+    <p>
+        This problem is compounded by how CartPole's reward structure interacts with DQN's bootstrapped value estimates.
+        DQN estimates the value of a state-action pair as
+    </p>
+
+    <div class="equation-block">
+        \[
+        y = r + \gamma \max_{a'} Q_{\theta^{-}}(s', a')
+        \]
+    </div>
+
+    <p>
+        When episodes terminate within a few steps, the agent never observes the long-horizon returns that would make
+        \(\max_{a'} Q_{\theta^{-}}(s', a')\) a meaningful quantity.
+        The bootstrapped targets collapse toward zero, the Q-values learned from those targets are unreliable,
+        and the policy derived from those Q-values does no better than random exploration.
+        The agent is stuck: it cannot collect better experience without a better policy,
+        and it cannot develop a better policy without better experience.
+    </p>
+
+    <p>
+        CartPole is also an unforgiving environment in the sense that recovery from a bad state is essentially impossible.
+        Once the pole tilts past a small threshold, no action can save it.
+        This means the agent has very little opportunity to observe the transition between near-failure and recovery,
+        which is precisely the region of the state space where a useful policy must act.
+        Algorithms that learn on-policy, such as PPO, accumulate this experience naturally by rolling out full trajectories
+        and can gradually push into harder states as the policy improves.
+        DQN, because it trains on stored transitions from a buffer dominated by early failures,
+        does not benefit from this kind of progressive curriculum.
+    </p>
+
+    <p>
+        Together, these factors explain why DQN's failure on CartPole is consistent across every integrator and timestep.
+        The numerical configuration of the simulator changes the specific trajectories the agent observes,
+        but it does not change the fundamental dynamic that prevents the replay buffer from accumulating
+        the quality of experience that DQN requires.
+    </p>
+
 </section>
