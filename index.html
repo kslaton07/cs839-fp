@@ -309,11 +309,14 @@
             <h2>Future Work</h2>
 
             <p>
-                I did intend on doing a domain randomization inspired training and evaluation, however I saw
-                that people online were able to get cartpole to learn with DQN, thus most of my time was spent
-                trying to get this to work on my end as well (unfortunately, it still did not work yet).
+                I did intend on doing a domain randomization inspired training and evaluation, however I think there was some 
+                issue with my CartPole implementation, as it struggled to learn with both DQN and PPO and did not produce substantial 
+                results. I initially assumed that there was a mismatch between the training algorithms and the CartPole environment, as 
+                CartPole is fairly "unforgiving". However, at this stage, I now think it might be an issue with the general numerical 
+                integrator functions I made not being flexible enough to accomodate both environments.  
+
                 However, I do plan on doing this extension in the near future and updating the webpage accordingly
-                (as well as defeating DQN training with CartPole).
+                (as well as fixing he issues with CartPole). 
             </p>
 
             <p>
@@ -370,9 +373,9 @@
         const sections = [
             { id: "background-rl",          file: "HTML/background_rl.html" },
             { id: "background-integrators", file: "HTML/background_integrators.html" },
-            { id: "results-dqn-cartpole",   file: "HTML/dqn_cartpole.html" },
+            // { id: "results-dqn-cartpole",   file: "HTML/dqn_cartpole.html" },
             { id: "results-dqn-acrobot",    file: "HTML/dqn_acrobot.html" },
-            { id: "results-ppo-cartpole",   file: "HTML/ppo_cartpole.html" },
+            // { id: "results-ppo-cartpole",   file: "HTML/ppo_cartpole.html" },
             { id: "results-ppo-acrobot",    file: "HTML/ppo_acrobot.html" },
         ];
 
