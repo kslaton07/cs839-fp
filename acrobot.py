@@ -525,7 +525,7 @@ def seuler(derivs, y0, t):
 
     return yout[-1][:4]
 
-def ieuler(derivs, y0, t, tol=1e-8, max_iter=10):
+def ieuler(derivs, y0, t, tol=1e-8, max_iter=50):
     y0 = np.asarray(y0, dtype=np.float64)
     Ny = len(y0)
     yout = np.zeros((len(t), Ny), np.float64)
@@ -567,3 +567,38 @@ def ieuler(derivs, y0, t, tol=1e-8, max_iter=10):
         yout[i + 1] = np.append(y_next, torque)  # re-attach torque for storage
 
     return yout[-1][:4]
+
+def vverlet(derivs, y0, t):
+    """
+    Integrate using Velocity Verlet method.
+    """
+    y = np.array(y0[:4], dtype=np.float64)
+    torque = y0[-1]
+
+    def get_acc(state):
+        # get accelerations (ddtheta1, ddtheta2) from derivs
+        full = np.append(state, torque)
+        d = np.asarray(derivs(full))
+        return d[2:4]  # ddtheta1, ddtheta2
+
+    for i in range(len(t) - 1):
+        dt = t[i + 1] - t[i]
+
+        pos = y[:2]  # theta1, theta2
+        vel = y[2:4]  # dtheta1, dtheta2
+
+        a_curr = get_acc(y)
+
+        # step position using current velocity AND acceleration
+        new_pos = pos + vel * dt + 0.5 * a_curr * dt**2
+
+        # get acceleration at new position
+        new_state = np.concatenate([new_pos, vel])
+        a_next = get_acc(new_state)
+
+        # step velocity using AVERAGE of current and next acceleration
+        new_vel = vel + 0.5 * (a_curr + a_next) * dt
+
+        y = np.concatenate([new_pos, new_vel])
+
+    return y[:4]

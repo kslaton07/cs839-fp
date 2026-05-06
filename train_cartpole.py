@@ -1,19 +1,20 @@
 """
-DQN training script for AcrobotEnv — compares integrators and timesteps.
+DQN training script for CartPoleEnv — compares integrators and timesteps.
+Mirrors the structure of train.py for AcrobotEnv.
 
-Metrics tracked per configuration:
-  - Episode reward (smoothed training curve)
-  - Episodes to solve (first episode where smoothed reward >= -100)
-  - Wall-clock training time
-  - Numerical stability (NaN / divergence events)
+Key differences from Acrobot:
+  - Reward is shaped: 1.0 - |theta| / theta_threshold (closer to upright = better)
+  - Termination penalty: -10 when pole falls, to signal failure strongly
+  - Solve threshold is 300 (60% of max 500 simulated-time reward)
+  - MAX_STEPS = int(500 / dt) scaled to simulated time
+  - Reward normalised to simulated-time units: reward *= dt
+  - eps_decay scaled without 5x multiplier for faster exploration decay
+  - Larger replay buffer (500k) and delayed training start (5000 transitions)
 
-Usage:
-    python train.py
-
-Results are saved to results/  as:
-  - results/metrics.json       — raw per-episode data for all configs
-  - results/summary.csv        — one row per config with aggregate stats
-  - results/plots/             — training curve plots
+Results saved to results_cartpole/ as:
+  - results_cartpole/metrics.json
+  - results_cartpole/summary.csv
+  - results_cartpole/plots/
 """
 
 import time
@@ -24,41 +25,59 @@ import random
 import math
 import collections
 import numpy as np
-from numpy import cos, pi, sin
 import ray
 
-# ── Optional: suppress gymnasium warnings ────────────────────────────────────
 import warnings
 warnings.filterwarnings("ignore")
 
-# ── Import acrobot module ─────────────────────────────────────────────────────
-from acrobot import AcrobotEnv, rk4, rk2, feuler, seuler, ieuler, wrap, bound
+from acrobot import rk4, rk2, feuler, seuler, ieuler, vverlet
+from cartpole import CartPoleEnv
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Experiment configuration
 # ─────────────────────────────────────────────────────────────────────────────
 INTEGRATORS = {
-    "rk4":    rk4,
-    "rk2":    rk2,
-    "feuler": feuler,
-    "seuler": seuler,
-    "ieuler": ieuler,
+    "rk4":     rk4,
+    "rk2":     rk2,
+    "feuler":  feuler,
+    "seuler":  seuler,
+    "ieuler":  ieuler,
+    "vverlet": vverlet,
 }
 
 TIMESTEPS = [1e-2, 5e-2, 1e-1, 0.5, 1, 1.5, 2]
 
-NUM_EPISODES    = 500   # training episodes per config
-SOLVE_THRESHOLD = -100  # smoothed reward considered "solved"
-SMOOTH_WINDOW   = 20    # episodes to average for solve detection
-SEED            = 42
+NUM_EPISODES       = 500
+SOLVE_THRESHOLD    = 300
+SMOOTH_WINDOW      = 20
+SEED               = 42
+TERMINATION_PENALTY = -10.0   # large negative reward when pole falls
+MIN_BUFFER         = 5000     # don't start training until buffer has this many transitions
+
+THETA_THRESHOLD_RADIANS = 12 * 2 * math.pi / 360
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Replay buffer
+# JSON serialization helper — numpy float32/int64 not natively serializable
+# ─────────────────────────────────────────────────────────────────────────────
+def to_serializable(obj):
+    if isinstance(obj, (np.float32, np.float64)):
+        return float(obj)
+    if isinstance(obj, (np.int32, np.int64)):
+        return int(obj)
+    if isinstance(obj, list):
+        return [to_serializable(i) for i in obj]
+    if isinstance(obj, dict):
+        return {k: to_serializable(v) for k, v in obj.items()}
+    return obj
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Replay buffer — larger capacity than Acrobot
 # ─────────────────────────────────────────────────────────────────────────────
 class ReplayBuffer:
-    def __init__(self, capacity=50_000):
+    def __init__(self, capacity=500_000):
         self.buf = collections.deque(maxlen=capacity)
 
     def push(self, s, a, r, s2, done):
@@ -78,10 +97,7 @@ class ReplayBuffer:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Minimal DQN (numpy-only, no deep learning framework required)
-#
-# Architecture: two fully-connected hidden layers (64 units, ReLU).
-# Trained with SGD + experience replay + target network.
+# DQN (identical to Acrobot train.py)
 # ─────────────────────────────────────────────────────────────────────────────
 class DQN:
     """Lightweight DQN implemented in pure numpy."""
@@ -100,23 +116,21 @@ class DQN:
         self.eps_decay  = eps_decay
         self.steps_done = 0
 
-        # Weight initialisation (He)
         def he(fan_in, fan_out):
             return rng.standard_normal((fan_in, fan_out)) * math.sqrt(2.0 / fan_in)
 
-        self.W = [he(obs_dim, hidden), he(hidden, hidden), he(hidden, n_actions)]
-        self.b = [np.zeros(hidden), np.zeros(hidden), np.zeros(n_actions)]
-        self.tW = [w.copy() for w in self.W]   # target network weights
+        self.W  = [he(obs_dim, hidden), he(hidden, hidden), he(hidden, n_actions)]
+        self.b  = [np.zeros(hidden), np.zeros(hidden), np.zeros(n_actions)]
+        self.tW = [w.copy() for w in self.W]
         self.tb = [b.copy() for b in self.b]
         self.update_count = 0
 
-    # ── Forward pass ─────────────────────────────────────────────────────────
     def _forward(self, x, W, b):
         h = x
         for i, (w, bi) in enumerate(zip(W, b)):
             h = h @ w + bi
             if i < len(W) - 1:
-                h = np.maximum(0, h)   # ReLU
+                h = np.maximum(0, h)
         return h
 
     def predict(self, s):
@@ -125,7 +139,6 @@ class DQN:
     def predict_target(self, s):
         return self._forward(np.atleast_2d(s), self.tW, self.tb)
 
-    # ── ε-greedy action selection ─────────────────────────────────────────────
     def select_action(self, s):
         eps = self.eps_end + (self.eps_start - self.eps_end) * \
               math.exp(-self.steps_done / self.eps_decay)
@@ -134,24 +147,21 @@ class DQN:
             return random.randrange(self.n_actions)
         return int(np.argmax(self.predict(s)))
 
-    # ── SGD update on one mini-batch ─────────────────────────────────────────
-    def update(self, replay: ReplayBuffer):
-        if len(replay) < self.batch_size:
+    def update(self, replay: ReplayBuffer, min_buffer: int):
+        # Wait until buffer has enough diverse experience before training
+        if len(replay) < min_buffer:
             return None
 
         s, a, r, s2, done = replay.sample(self.batch_size)
 
-        # Target Q-values
         q_next  = self.predict_target(s2).max(axis=1)
         targets = r + self.gamma * q_next * (1 - done)
 
-        # Current Q-values and loss
         q_pred  = self.predict(s)
         errors  = q_pred.copy()
         errors[np.arange(len(a)), a] = targets
         loss    = float(np.mean((q_pred - errors) ** 2))
 
-        # Backprop through 3-layer net
         dL = 2 * (q_pred - errors) / len(a)
 
         grads_W, grads_b = [], []
@@ -173,7 +183,6 @@ class DQN:
             self.W[i] -= self.lr * grads_W[i]
             self.b[i] -= self.lr * grads_b[i]
 
-        # Periodically sync target network
         self.update_count += 1
         if self.update_count % self.target_update_freq == 0:
             self.tW = [w.copy() for w in self.W]
@@ -181,27 +190,18 @@ class DQN:
 
         return loss
 
+    def save(self, path):
+        np.savez(path,
+                 W0=self.W[0], W1=self.W[1], W2=self.W[2],
+                 b0=self.b[0], b1=self.b[1], b2=self.b[2])
 
-# ─────────────────────────────────────────────────────────────────────────────
-# ieuler helpers — must be top-level for Ray/pickle serialisation
-# ─────────────────────────────────────────────────────────────────────────────
-def _numerical_jacobian(f, y, eps=1e-6):
-    """Approximate the Jacobian of f at y using forward finite differences."""
-    n  = len(y)
-    J  = np.zeros((n, n))
-    f0 = np.asarray(f(y))
-    for j in range(n):
-        yp     = y.copy()
-        yp[j] += eps
-        J[:, j] = (np.asarray(f(yp)) - f0) / eps
-    return J
-
-
-def _make_derivs4(derivs, torque):
-    """Return a closure that strips/reattaches the torque dimension."""
-    def derivs4(y4):
-        return np.asarray(derivs(np.append(y4, torque)))[:4]
-    return derivs4
+    @classmethod
+    def load(cls, path, obs_dim, n_actions, hidden=64):
+        data  = np.load(path)
+        agent = cls(obs_dim, n_actions, hidden=hidden)
+        agent.W = [data["W0"], data["W1"], data["W2"]]
+        agent.b = [data["b0"], data["b1"], data["b2"]]
+        return agent
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -209,25 +209,29 @@ def _make_derivs4(derivs, torque):
 # ─────────────────────────────────────────────────────────────────────────────
 @ray.remote
 def train_one(integrator_name, dt, seed=SEED):
-    # Re-import inside worker — avoids Ray serialising the function object,
-    # which breaks ieuler due to its nested closures.
-    from acrobot import AcrobotEnv, rk4, rk2, feuler, seuler, ieuler
+    from acrobot import rk4, rk2, feuler, seuler, ieuler, vverlet
+    from cartpole import CartPoleEnv
+    import math
+
+    TERMINATION_PENALTY = -10.0
+    MIN_BUFFER          = 5000
+
     _integrators = {
         "rk4": rk4, "rk2": rk2, "feuler": feuler,
-        "seuler": seuler, "ieuler": ieuler,
+        "seuler": seuler, "ieuler": ieuler, "vverlet": vverlet,
     }
     integrator_fn = _integrators[integrator_name]
 
     random.seed(seed)
     np.random.seed(seed)
 
-    env    = AcrobotEnv(integrator=integrator_fn, dt=dt)
+    env    = CartPoleEnv(integrator=integrator_fn, dt=dt)
     obs, _ = env.reset(seed=seed)
     obs_dim, n_actions = obs.shape[0], env.action_space.n
 
-    eps_decay     = 5*int(100 / dt)  # scale exploration to match steps per episode
-    agent  = DQN(obs_dim, n_actions, eps_decay=eps_decay, seed=seed)
-    replay = ReplayBuffer()
+    eps_decay = int(500 / dt)
+    agent     = DQN(obs_dim, n_actions, eps_decay=eps_decay, seed=seed)
+    replay    = ReplayBuffer(capacity=500_000)
 
     episode_rewards   = []
     smoothed_rewards  = []
@@ -239,20 +243,31 @@ def train_one(integrator_name, dt, seed=SEED):
         obs, _ = env.reset()
         total_reward = 0.0
 
-        MAX_STEPS = int(100/dt) 
+        MAX_STEPS = int(500 / dt)
+
         for _ in range(MAX_STEPS):
             action = agent.select_action(obs)
             next_obs, reward, terminated, truncated, _ = env.step(action)
-            reward *= dt  # normalise reward to simulated-time units
 
-            # Detect numerical instability
+            # Simple survival reward: +dt per step (equivalent to +1/step in
+            # simulated-time units). No shaping needed — CartPole's dense reward
+            # already gives a clear learning signal.
+            reward = dt
+
+            # Termination penalty scaled by dt so it stays consistent across
+            # all timestep sizes.
+            if terminated:
+                reward += TERMINATION_PENALTY * dt
+
             if not np.all(np.isfinite(next_obs)):
                 nan_events += 1
-                next_obs   = obs.copy()   # recover: stay in place
+                next_obs   = obs.copy()
                 terminated = True
 
             replay.push(obs, action, reward, next_obs, terminated or truncated)
-            agent.update(replay)
+
+            # Delayed training start — wait for MIN_BUFFER diverse experiences
+            agent.update(replay, MIN_BUFFER)
 
             obs          = next_obs
             total_reward += reward
@@ -260,38 +275,41 @@ def train_one(integrator_name, dt, seed=SEED):
             if terminated or truncated:
                 break
 
-        episode_rewards.append(total_reward)
+        episode_rewards.append(float(total_reward))
 
-        # Smoothed reward over last SMOOTH_WINDOW episodes
         window = episode_rewards[-SMOOTH_WINDOW:]
         smooth = float(np.mean(window))
         smoothed_rewards.append(smooth)
 
-        # Record first episode that clears the solve threshold
         if episodes_to_solve is None and len(window) == SMOOTH_WINDOW \
                 and smooth >= SOLVE_THRESHOLD:
             episodes_to_solve = ep + 1
 
     wall_time = time.perf_counter() - wall_start
 
+    os.makedirs("weights_cartpole", exist_ok=True)
+    weight_path = f"weights_cartpole/{integrator_name}_dt{dt}.npz"
+    agent.save(weight_path)
+
     return {
         "integrator":        integrator_name,
-        "dt":                dt,
-        "episode_rewards":   episode_rewards,
-        "smoothed_rewards":  smoothed_rewards,
-        "episodes_to_solve": episodes_to_solve,   # None if never solved
-        "wall_time_s":       round(wall_time, 2),
-        "nan_events":        nan_events,
-        "final_smooth":      round(smoothed_rewards[-1], 2),
+        "dt":                float(dt),
+        "episode_rewards":   [float(r) for r in episode_rewards],
+        "smoothed_rewards":  [float(r) for r in smoothed_rewards],
+        "episodes_to_solve": int(episodes_to_solve) if episodes_to_solve else None,
+        "wall_time_s":       round(float(wall_time), 2),
+        "nan_events":        int(nan_events),
+        "final_smooth":      round(float(smoothed_rewards[-1]), 2),
+        "weight_path":       weight_path,
     }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Main: run all configurations and save results
+# Main
 # ─────────────────────────────────────────────────────────────────────────────
 def main():
     ray.init(ignore_reinit_error=True)
-    os.makedirs("results/plots", exist_ok=True)
+    os.makedirs("results_cartpole/plots", exist_ok=True)
     all_results = []
 
     configs = [(name, dt)
@@ -300,14 +318,11 @@ def main():
 
     print(f"Running {len(configs)} configurations x {NUM_EPISODES} episodes each (parallel via Ray).\n")
 
-    # Dispatch all configs in parallel — use the ref itself as dict key,
-    # which relies on Ray's built-in __hash__/__eq__ on object refs.
     pending_map = {
         train_one.remote(name, dt): (name, dt)
         for name, dt in configs
     }
 
-    # Collect results as they complete
     while pending_map:
         done_refs, _ = ray.wait(list(pending_map.keys()), num_returns=1)
         done_ref = done_refs[0]
@@ -315,37 +330,35 @@ def main():
 
         try:
             result = ray.get(done_ref)
-            print(f"  Done: {name}  dt={dt:.0e}  "
+            print(f"  Done: {name}  dt={dt}  "
                   f"solved_ep={result['episodes_to_solve']}  "
                   f"final_reward={result['final_smooth']}  "
                   f"time={result['wall_time_s']}s  "
                   f"nan={result['nan_events']}")
             all_results.append(result)
         except Exception as e:
-            print(f"  ERROR: {name}  dt={dt:.0e}  ({e})")
+            print(f"  ERROR: {name}  dt={dt}  ({e})")
 
-    # ── Save raw metrics as JSON ──────────────────────────────────────────────
-    with open("results/metrics.json", "w") as f:
+    # JSON serialization — all values already converted to native Python types
+    # in train_one return dict, so no extra conversion needed here
+    with open("results_cartpole/metrics.json", "w") as f:
         json.dump(all_results, f, indent=2)
 
-    # ── Save summary CSV ──────────────────────────────────────────────────────
     summary_fields = ["integrator", "dt", "episodes_to_solve",
                       "final_smooth", "wall_time_s", "nan_events"]
-    with open("results/summary.csv", "w", newline="") as f:
+    with open("results_cartpole/summary.csv", "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=summary_fields)
         writer.writeheader()
         for r in all_results:
             writer.writerow({k: r[k] for k in summary_fields})
 
-    print("\nResults saved to results/metrics.json and results/summary.csv")
+    print("\nResults saved to results_cartpole/metrics.json and results_cartpole/summary.csv")
 
-    # ── Plot training curves (requires matplotlib) ────────────────────────────
     try:
         import matplotlib.pyplot as plt
 
         integrator_names = list(INTEGRATORS.keys())
 
-        # One plot per integrator — all dt values as separate lines
         by_integrator = {}
         for r in all_results:
             by_integrator.setdefault(r["integrator"], []).append(r)
@@ -354,42 +367,40 @@ def main():
             fig, ax = plt.subplots(figsize=(10, 5))
             for r in sorted(runs, key=lambda x: x["dt"]):
                 ax.plot(r["smoothed_rewards"],
-                        label=f"dt={r['dt']:.0e}  "
+                        label=f"dt={r['dt']}  "
                               f"(solved={r['episodes_to_solve']}, "
                               f"nan={r['nan_events']})")
             ax.axhline(SOLVE_THRESHOLD, color="black", linestyle="--",
-                       linewidth=0.8, label="solve threshold (-100)")
-            ax.set_title(f"DQN on Acrobot — integrator: {integ_name}")
+                       linewidth=0.8, label=f"solve threshold ({SOLVE_THRESHOLD})")
+            ax.set_title(f"DQN on CartPole — integrator: {integ_name}")
             ax.set_xlabel("Episode")
             ax.set_ylabel(f"Smoothed reward (window={SMOOTH_WINDOW})")
             ax.legend(fontsize=8)
             ax.grid(alpha=0.3)
             plt.tight_layout()
-            fname = f"results/plots/{integ_name}.png"
+            fname = f"results_cartpole/plots/{integ_name}.png"
             plt.savefig(fname, dpi=150)
             plt.close()
             print(f"  Plot saved: {fname}")
 
-        # Cross-integrator comparison — one plot per timestep
         for default_dt in TIMESTEPS:
             fig, ax = plt.subplots(figsize=(10, 5))
             for r in all_results:
                 if r["dt"] == default_dt:
                     ax.plot(r["smoothed_rewards"], label=r["integrator"])
             ax.axhline(SOLVE_THRESHOLD, color="black", linestyle="--",
-                       linewidth=0.8, label="solve threshold (-100)")
-            ax.set_title(f"Integrator comparison at dt={default_dt:.0e}")
+                       linewidth=0.8, label=f"solve threshold ({SOLVE_THRESHOLD})")
+            ax.set_title(f"Integrator comparison at dt={default_dt}")
             ax.set_xlabel("Episode")
             ax.set_ylabel(f"Smoothed reward (window={SMOOTH_WINDOW})")
             ax.legend()
             ax.grid(alpha=0.3)
             plt.tight_layout()
-            fname = f"results/plots/comparison_dt_{default_dt:.0e}.png"
+            fname = f"results_cartpole/plots/comparison_dt_{default_dt}.png"
             plt.savefig(fname, dpi=150)
             plt.close()
             print(f"  Plot saved: {fname}")
 
-        # Heatmap: episodes_to_solve (integrator x dt)
         heat_data = np.full((len(integrator_names), len(TIMESTEPS)), np.nan)
         for r in all_results:
             i = integrator_names.index(r["integrator"])
@@ -399,7 +410,7 @@ def main():
         fig, ax = plt.subplots(figsize=(11, 4))
         im = ax.imshow(heat_data, aspect="auto", cmap="RdYlGn_r")
         ax.set_xticks(range(len(TIMESTEPS)))
-        ax.set_xticklabels([f"{dt:.0e}" for dt in TIMESTEPS])
+        ax.set_xticklabels([str(dt) for dt in TIMESTEPS])
         ax.set_yticks(range(len(integrator_names)))
         ax.set_yticklabels(integrator_names)
         ax.set_xlabel("dt")
@@ -411,11 +422,10 @@ def main():
                 txt = "-" if np.isnan(val) else (str(int(val)) if val < NUM_EPISODES else "x")
                 ax.text(j, i, txt, ha="center", va="center", fontsize=7)
         plt.tight_layout()
-        plt.savefig("results/plots/heatmap_solve.png", dpi=150)
+        plt.savefig("results_cartpole/plots/heatmap_solve.png", dpi=150)
         plt.close()
-        print("  Plot saved: results/plots/heatmap_solve.png")
+        print("  Plot saved: results_cartpole/plots/heatmap_solve.png")
 
-        # Heatmap: NaN events (integrator x dt)
         nan_data = np.full((len(integrator_names), len(TIMESTEPS)), np.nan)
         for r in all_results:
             i = integrator_names.index(r["integrator"])
@@ -425,7 +435,7 @@ def main():
         fig, ax = plt.subplots(figsize=(11, 4))
         im = ax.imshow(nan_data, aspect="auto", cmap="Reds")
         ax.set_xticks(range(len(TIMESTEPS)))
-        ax.set_xticklabels([f"{dt:.0e}" for dt in TIMESTEPS])
+        ax.set_xticklabels([str(dt) for dt in TIMESTEPS])
         ax.set_yticks(range(len(integrator_names)))
         ax.set_yticklabels(integrator_names)
         ax.set_xlabel("dt")
@@ -437,24 +447,21 @@ def main():
                 txt = "-" if np.isnan(val) else str(int(val))
                 ax.text(j, i, txt, ha="center", va="center", fontsize=7)
         plt.tight_layout()
-        plt.savefig("results/plots/heatmap_nan.png", dpi=150)
+        plt.savefig("results_cartpole/plots/heatmap_nan.png", dpi=150)
         plt.close()
-        print("  Plot saved: results/plots/heatmap_nan.png")
+        print("  Plot saved: results_cartpole/plots/heatmap_nan.png")
 
-        # Bar chart: wall-clock time per integrator across dt values
         fig, ax = plt.subplots(figsize=(11, 4))
         n_dt = len(TIMESTEPS)
         bar_width = 0.8 / n_dt
         for j, dt in enumerate(TIMESTEPS):
             times = []
-            names = []
             for name in integrator_names:
                 match = [r for r in all_results
                          if r["integrator"] == name and r["dt"] == dt]
                 times.append(match[0]["wall_time_s"] if match else 0)
-                names.append(name)
             x = np.arange(len(integrator_names))
-            ax.bar(x + j * bar_width, times, width=bar_width, label=f"dt={dt:.0e}")
+            ax.bar(x + j * bar_width, times, width=bar_width, label=f"dt={dt}")
         ax.set_xticks(np.arange(len(integrator_names)) + bar_width * (n_dt - 1) / 2)
         ax.set_xticklabels(integrator_names)
         ax.set_ylabel("Wall-clock time (s)")
@@ -462,13 +469,12 @@ def main():
         ax.legend(fontsize=7, ncol=4)
         ax.grid(axis="y", alpha=0.3)
         plt.tight_layout()
-        plt.savefig("results/plots/wallclock_time.png", dpi=150)
+        plt.savefig("results_cartpole/plots/wallclock_time.png", dpi=150)
         plt.close()
-        print("  Plot saved: results/plots/wallclock_time.png")
+        print("  Plot saved: results_cartpole/plots/wallclock_time.png")
 
     except ImportError:
-        print("matplotlib not installed — skipping plots. "
-              "Run: pip install matplotlib")
+        print("matplotlib not installed — skipping plots.")
 
 
 if __name__ == "__main__":
