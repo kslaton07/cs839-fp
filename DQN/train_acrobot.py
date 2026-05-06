@@ -284,120 +284,221 @@ def main():
 
     try:
         import matplotlib.pyplot as plt
+        from matplotlib.colors import LinearSegmentedColormap
 
         integrator_names = list(INTEGRATORS.keys())
+
+        # Fixed lilac-forward color for each integrator.
+        INTEGRATOR_COLORS = {
+            "rk4":     "#5b3f8c",
+            "rk2":     "#7d5ba6",
+            "feuler":  "#9b72cf",
+            "seuler":  "#b388d8",
+            "ieuler":  "#6d28d9",
+            "vverlet": "#c084fc",
+        }
+
+        # Fixed lilac-forward color for each timestep.
+        DT_COLORS = {
+            0.01: "#ede7f6",
+            0.05: "#d8c7f0",
+            0.1:  "#c7a9e8",
+            0.5:  "#b388d8",
+            1:    "#9b6bcc",
+            1.5:  "#7d5ba6",
+            2:    "#5b3f8c",
+        }
+
+        PURPLE_CMAP = LinearSegmentedColormap.from_list(
+            "custom_lilac",
+            ["#f7f4fb", "#d8c7f0", "#b388d8", "#7d5ba6", "#4b2e6f"]
+        )
 
         by_integrator = {}
         for r in all_results:
             by_integrator.setdefault(r["integrator"], []).append(r)
 
+        # ------------------------------------------------------------
+        # Plot 1: one plot per integrator, lines colored by timestep.
+        # ------------------------------------------------------------
         for integ_name, runs in by_integrator.items():
             fig, ax = plt.subplots(figsize=(10, 5))
+
             for r in sorted(runs, key=lambda x: x["dt"]):
-                ax.plot(r["smoothed_rewards"],
-                        label=f"dt={r['dt']}  "
-                              f"(solved={r['episodes_to_solve']}, "
-                              f"nan={r['nan_events']})")
-            ax.axhline(SOLVE_THRESHOLD, color="black", linestyle="--",
-                       linewidth=0.8, label=f"solve threshold ({SOLVE_THRESHOLD})")
-            ax.set_title(f"DQN on Acrobot — integrator: {integ_name}")
+                ax.plot(
+                    r["smoothed_rewards"],
+                    color=DT_COLORS[r["dt"]],
+                    linewidth=2.0,
+                    label=f"dt={r['dt']}  "
+                          f"(solved={r['episodes_to_solve']}, "
+                          f"nan={r['nan_events']})"
+                )
+
+            ax.axhline(
+                SOLVE_THRESHOLD,
+                color="#2f2438",
+                linestyle="--",
+                linewidth=0.8,
+                label=f"solve threshold ({SOLVE_THRESHOLD})"
+            )
+
+            ax.set_title(f"DQN on Acrobot: integrator {integ_name}")
             ax.set_xlabel("Episode")
             ax.set_ylabel(f"Smoothed reward (window={SMOOTH_WINDOW})")
             ax.legend(fontsize=8)
             ax.grid(alpha=0.3)
+
             plt.tight_layout()
             fname = f"{PLOTS_DIR}/{integ_name}.png"
             plt.savefig(fname, dpi=150)
             plt.close()
             print(f"  Plot saved: {fname}")
 
+        # ------------------------------------------------------------
+        # Plot 2: one plot per dt, lines colored by integrator.
+        # ------------------------------------------------------------
         for default_dt in TIMESTEPS:
             fig, ax = plt.subplots(figsize=(10, 5))
+
             for r in all_results:
                 if r["dt"] == default_dt:
-                    ax.plot(r["smoothed_rewards"], label=r["integrator"])
-            ax.axhline(SOLVE_THRESHOLD, color="black", linestyle="--",
-                       linewidth=0.8, label=f"solve threshold ({SOLVE_THRESHOLD})")
+                    ax.plot(
+                        r["smoothed_rewards"],
+                        color=INTEGRATOR_COLORS[r["integrator"]],
+                        linewidth=2.0,
+                        label=r["integrator"]
+                    )
+
+            ax.axhline(
+                SOLVE_THRESHOLD,
+                color="#2f2438",
+                linestyle="--",
+                linewidth=0.8,
+                label=f"solve threshold ({SOLVE_THRESHOLD})"
+            )
+
             ax.set_title(f"Integrator comparison at dt={default_dt}")
             ax.set_xlabel("Episode")
             ax.set_ylabel(f"Smoothed reward (window={SMOOTH_WINDOW})")
             ax.legend()
             ax.grid(alpha=0.3)
+
             plt.tight_layout()
             fname = f"{PLOTS_DIR}/comparison_dt_{default_dt}.png"
             plt.savefig(fname, dpi=150)
             plt.close()
             print(f"  Plot saved: {fname}")
 
+        # ------------------------------------------------------------
+        # Heatmap 1: episodes to solve.
+        # ------------------------------------------------------------
         heat_data = np.full((len(integrator_names), len(TIMESTEPS)), np.nan)
+
         for r in all_results:
             i = integrator_names.index(r["integrator"])
             j = TIMESTEPS.index(r["dt"])
-            heat_data[i, j] = r["episodes_to_solve"] if r["episodes_to_solve"] else NUM_EPISODES
+            heat_data[i, j] = (
+                r["episodes_to_solve"]
+                if r["episodes_to_solve"]
+                else NUM_EPISODES
+            )
 
         fig, ax = plt.subplots(figsize=(11, 4))
-        im = ax.imshow(heat_data, aspect="auto", cmap="RdYlGn_r")
+        im = ax.imshow(heat_data, aspect="auto", cmap=PURPLE_CMAP)
+
         ax.set_xticks(range(len(TIMESTEPS)))
         ax.set_xticklabels([f"{dt}" for dt in TIMESTEPS])
         ax.set_yticks(range(len(integrator_names)))
         ax.set_yticklabels(integrator_names)
         ax.set_xlabel("dt")
         ax.set_title("Episodes to solve (lower=better, x=never solved)")
+
         plt.colorbar(im, ax=ax)
+
         for i in range(len(integrator_names)):
             for j in range(len(TIMESTEPS)):
                 val = heat_data[i, j]
-                txt = "-" if np.isnan(val) else (str(int(val)) if val < NUM_EPISODES else "x")
+                txt = "-" if np.isnan(val) else (
+                    str(int(val)) if val < NUM_EPISODES else "x"
+                )
                 ax.text(j, i, txt, ha="center", va="center", fontsize=7)
+
         plt.tight_layout()
         fname = f"{PLOTS_DIR}/heatmap_solve.png"
         plt.savefig(fname, dpi=150)
         plt.close()
         print(f"  Plot saved: {fname}")
 
+        # ------------------------------------------------------------
+        # Heatmap 2: NaN / instability events.
+        # ------------------------------------------------------------
         nan_data = np.full((len(integrator_names), len(TIMESTEPS)), np.nan)
+
         for r in all_results:
             i = integrator_names.index(r["integrator"])
             j = TIMESTEPS.index(r["dt"])
             nan_data[i, j] = r["nan_events"]
 
         fig, ax = plt.subplots(figsize=(11, 4))
-        im = ax.imshow(nan_data, aspect="auto", cmap="Reds")
+        im = ax.imshow(nan_data, aspect="auto", cmap=PURPLE_CMAP)
+
         ax.set_xticks(range(len(TIMESTEPS)))
         ax.set_xticklabels([f"{dt}" for dt in TIMESTEPS])
         ax.set_yticks(range(len(integrator_names)))
         ax.set_yticklabels(integrator_names)
         ax.set_xlabel("dt")
         ax.set_title("NaN / instability events (lower=better)")
+
         plt.colorbar(im, ax=ax)
+
         for i in range(len(integrator_names)):
             for j in range(len(TIMESTEPS)):
                 val = nan_data[i, j]
                 txt = "-" if np.isnan(val) else str(int(val))
                 ax.text(j, i, txt, ha="center", va="center", fontsize=7)
+
         plt.tight_layout()
         fname = f"{PLOTS_DIR}/heatmap_nan.png"
         plt.savefig(fname, dpi=150)
         plt.close()
         print(f"  Plot saved: {fname}")
 
+        # ------------------------------------------------------------
+        # Bar plot: wall-clock time, bars colored by timestep.
+        # ------------------------------------------------------------
         fig, ax = plt.subplots(figsize=(11, 4))
         n_dt = len(TIMESTEPS)
         bar_width = 0.8 / n_dt
+
         for j, dt in enumerate(TIMESTEPS):
             times = []
+
             for name in integrator_names:
-                match = [r for r in all_results
-                         if r["integrator"] == name and r["dt"] == dt]
+                match = [
+                    r for r in all_results
+                    if r["integrator"] == name and r["dt"] == dt
+                ]
                 times.append(match[0]["wall_time_s"] if match else 0)
+
             x = np.arange(len(integrator_names))
-            ax.bar(x + j * bar_width, times, width=bar_width, label=f"dt={dt}")
-        ax.set_xticks(np.arange(len(integrator_names)) + bar_width * (n_dt - 1) / 2)
+
+            ax.bar(
+                x + j * bar_width,
+                times,
+                width=bar_width,
+                color=DT_COLORS[dt],
+                label=f"dt={dt}"
+            )
+
+        ax.set_xticks(
+            np.arange(len(integrator_names)) + bar_width * (n_dt - 1) / 2
+        )
         ax.set_xticklabels(integrator_names)
         ax.set_ylabel("Wall-clock time (s)")
         ax.set_title("Training time per integrator and dt")
         ax.legend(fontsize=7, ncol=4)
         ax.grid(axis="y", alpha=0.3)
+
         plt.tight_layout()
         fname = f"{PLOTS_DIR}/wallclock_time.png"
         plt.savefig(fname, dpi=150)
@@ -405,7 +506,7 @@ def main():
         print(f"  Plot saved: {fname}")
 
     except ImportError:
-        print("matplotlib not installed — skipping plots.")
+        print("matplotlib not installed, skipping plots.")
 
 
 if __name__ == "__main__":

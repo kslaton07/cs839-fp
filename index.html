@@ -20,6 +20,7 @@
         <div class="nav-links">
             <a href="#abstract">Abstract</a>
             <a href="#background">Background</a>
+            <a href="#motivation">Motivation</a>
             <a href="#methodology">Methodology</a>
             <a href="#results">Results</a>
             <a href="#future">Future Work</a>
@@ -58,6 +59,33 @@
                 These findings motivate further investigation into simulation aware training and simulator configuration as a potential domain randomization technique.
             </p>
         </section>
+
+    <section id="motivation" class="card">
+        <h2>Motivation</h2>
+
+        <p>
+            One day I was having a discussing with a colleague about training agents in simulation in which he had the following opinion: <strong> the agent has
+            no notion of timestep </strong>. More concretely, training the agent in a simulator with a timestep such as \(10^{-3}\) should not, by itself, determine 
+            how the agent behaves during real-world deployment.
+        </p>
+
+        <p>
+            However, as someone with experience in multibody dynamics and simulation, this claim did not sit well with me. Even if timestep is not explicitly embedded in
+            the learning algorithm, there is still an implicit influnce simply because learned behavior is contingent on the environment, and the environment is contingent 
+            on what I refer to as the <strong>simulation configuration</strong>.
+        </p>
+
+        <p>
+            This simulation configuration refers to both the timestep and numerical integrator. Hence, there is not necessarily a clean separation between learned 
+            agent behavior and timestep. Actually, it is even more complex than initially considered since we must also consider the choice of integrator.
+        </p>
+
+        <p>
+            Thus, I wanted to take a moment to invesitgate how simulation configuration can effect learned agent behavior, and see what insights I could gather 
+            from my experiments. 
+        </p>
+    </section>
+
 
         <div id="background-container"></div>
 
