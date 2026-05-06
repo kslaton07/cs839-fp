@@ -31,8 +31,8 @@
             <figcaption>
                 <strong>DQN — RK4, \(\Delta t = 1\)</strong>
                 <br>
-                A visually striking late-episode breakthrough, corresponding to the sharp
-                hockey-stick improvement observed during training.
+                Quite chaotic which can be easily explained by the long time step well with the large timestep. However, artificial 
+                energy injection eventually gets it over the curve. 
             </figcaption>
         </figure>
 
@@ -44,8 +44,8 @@
             <figcaption>
                 <strong>DQN — Forward Euler, \(\Delta t = 0.01\)</strong>
                 <br>
-                The main small-timestep learner, illustrating the role of Forward Euler's
-                numerical energy injection in the learned swing-up behavior.
+                The main small-timestep learner. Even though it total episode behavior is slow (and hence not well suited for a gif) it is interesting to see Forward Euler's
+                numerical energy injection is quite stable at a small time step (slow and steady wins the race). 
             </figcaption>
         </figure>
     </div>
