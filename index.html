@@ -94,9 +94,211 @@
             <h2>Methodology</h2>
 
             <p>
-                Multiple ODE integration schemes were implemented and evaluated
-                across identical RL training environments.
+                The central goal of this project is to evaluate whether the choice of numerical integrator
+                and simulator timestep affects the policies learned by reinforcement learning agents.
+                To isolate this effect, all other aspects of training were held constant across runs.
+                The only variables that changed between experiments were the integrator type and the timestep \(\Delta t\).
             </p>
+
+            <h3>Environments</h3>
+
+            <p>
+                Experiments were conducted on two classic control tasks from OpenAI Gym:
+                CartPole and Acrobot.
+                Both environments involve continuous physical dynamics and discrete action spaces,
+                making them well-suited for studying the effect of numerical integration on RL training.
+            </p>
+
+            <p>
+                <strong>CartPole</strong> requires an agent to balance a pole mounted on a cart
+                by applying left or right forces to the cart.
+                The state consists of cart position, cart velocity, pole angle, and pole angular velocity.
+                The episode ends if the pole falls beyond a threshold angle or the cart moves out of bounds.
+            </p>
+
+            <p>
+                <strong>Acrobot</strong> requires an agent to swing a two-link pendulum above a target height
+                by applying a torque at the joint connecting the two links.
+                The state consists of the sine and cosine of the two joint angles and their angular velocities.
+                The episode ends when the tip of the second link reaches the required height.
+            </p>
+
+            <p>
+                These two tasks differ in their physical structure and reward geometry.
+                CartPole is a stabilization task with a dense reward signal,
+                while Acrobot is a swing-up task with a sparse reward signal.
+                Using both environments allows the results to be assessed across different control challenges.
+            </p>
+
+            <h3>Algorithms</h3>
+
+            <p>
+                Two reinforcement learning algorithms were evaluated: DQN and PPO.
+                Both algorithms were applied to every integrator-timestep combination in both environments,
+                resulting in a fully crossed experimental design.
+            </p>
+
+            <p>
+                DQN is an off-policy, value-based algorithm that learns an action-value function
+                approximated by a neural network.
+                It maintains a replay buffer of past transitions and uses a separate target network
+                to stabilize the Bellman update targets.
+                Because DQN stores and reuses past experience, it is more sensitive to the distribution
+                of transitions collected during training.
+            </p>
+
+            <p>
+                PPO is an on-policy, policy-gradient algorithm that directly learns a parameterized policy.
+                It discards experience after each update and relies only on the most recently collected trajectories.
+                Its clipped objective prevents large policy changes in a single update step.
+                Because PPO throws away past experience, it is less sensitive to the history
+                of transitions and more sensitive to the quality of the current rollout.
+            </p>
+
+            <h3>Integrators and Timesteps</h3>
+
+            <p>
+                Six numerical integrators were implemented and evaluated.
+                The non-symplectic integrators, ordered from lowest to highest fidelity, were
+                Forward Euler, Implicit Euler, RK2, and RK4.
+                The symplectic integrators were Symplectic Euler and Verlet.
+                Each integrator replaced the default numerical integration in the physics step
+                of both environments.
+            </p>
+
+            <p>
+                Each integrator was evaluated across seven timestep values:
+            </p>
+
+            <div class="equation-block">
+                \[
+                \Delta t \in \{10^{-2},\; 5 \times 10^{-2},\; 10^{-1},\; 0.5,\; 1,\; 1.5,\; 2\}
+                \]
+            </div>
+
+            <p>
+                This range spans two orders of magnitude, from timesteps small enough that all integrators
+                should behave similarly, to timesteps large enough that low-order methods are expected to
+                produce substantially inaccurate trajectories.
+            </p>
+
+            <p>
+                The full experiment therefore consisted of
+            </p>
+
+            <div class="equation-block">
+                \[
+                2 \text{ environments}
+                \times
+                2 \text{ algorithms}
+                \times
+                6 \text{ integrators}
+                \times
+                7 \text{ timesteps}
+                =
+                168 \text{ training runs}
+                \]
+            </div>
+
+            <h3>Controlling for Simulation Time</h3>
+
+            <p>
+                A critical methodological concern is that different timestep configurations
+                produce a different number of environment steps per unit of simulated time.
+                Smaller timesteps take more steps to simulate the same physical duration.
+                Without any correction, a small-\(\Delta t\) agent would observe more transitions,
+                collect more reward, and receive more gradient updates per episode than
+                a large-\(\Delta t\) agent, making direct comparison misleading.
+            </p>
+
+            <p>
+                To address this, the number of environment steps per episode was scaled
+                so that every configuration simulates the same total physical duration \(T_{\text{episode}}\).
+            </p>
+
+            <div class="equation-block">
+                \[
+                N_{\text{steps}} = \frac{T_{\text{episode}}}{\Delta t}
+                \]
+            </div>
+
+            <p>
+                This ensures that regardless of timestep, every episode represents the same
+                amount of simulated time.
+            </p>
+
+            <h3>Reward Scaling</h3>
+
+            <p>
+                Because smaller timesteps produce more steps per episode, an agent trained
+                with a small \(\Delta t\) would accumulate more reward steps than a large-\(\Delta t\) agent
+                even if both simulated the same physical duration.
+                To make total episode returns comparable across timestep configurations,
+                rewards were scaled by \(\Delta t\) at each step.
+            </p>
+
+            <div class="equation-block">
+                \[
+                r_t^{\text{scaled}} = \Delta t \cdot r_t
+                \]
+            </div>
+
+            <p>
+                With this scaling, the total return accumulated over an episode approximates
+                an integral of reward over simulated time rather than a sum over environment steps.
+                Two agents that behave identically on the same physical trajectory should
+                therefore receive the same total return regardless of which \(\Delta t\) they use.
+            </p>
+
+            <h3>DQN-Specific Controls</h3>
+
+            <p>
+                Two additional adjustments were made for DQN to account for the change in
+                step count across timestep configurations.
+            </p>
+
+            <p>
+                The replay buffer warmup was scaled by \(\Delta t\) so that training did not begin
+                until the buffer contained experience covering a fixed amount of simulated time,
+                rather than a fixed number of raw environment steps.
+            </p>
+
+            <div class="equation-block">
+                \[
+                N_{\text{warmup}} = N_{\text{warmup episodes}} \cdot \frac{T_{\text{episode}}}{\Delta t}
+                \]
+            </div>
+
+            <p>
+                The neural network update frequency was also scaled by \(\Delta t\) so that gradient
+                updates occurred at a consistent rate relative to simulated time rather than
+                relative to raw step count.
+            </p>
+
+            <div class="equation-block">
+                \[
+                N_{\text{update interval}} =
+                \max\!\left(1,\; \mathrm{round}\!\left(\frac{T_{\text{update}}}{\Delta t}\right)\right)
+                \]
+            </div>
+
+            <p>
+                Together, these controls ensure that DQN configurations with different timesteps
+                receive comparable amounts of simulated-time experience before and during learning,
+                so that observed differences in performance can be attributed to the integrator
+                and timestep rather than to differences in training exposure.
+            </p>
+
+            <h3>Evaluation</h3>
+
+            <p>
+                All training runs were conducted for the same number of total episodes.
+                Agent performance was measured by the mean episode return over a fixed evaluation window
+                at the end of training.
+                Results were compared across integrators and timesteps within each algorithm-environment combination
+                to assess how numerical configuration affects the final quality of the learned policy.
+            </p>
+
         </section>
 
         <section id="results" class="card">
