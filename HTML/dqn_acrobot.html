@@ -1,7 +1,228 @@
 <section id="results-dqn-acrobot" class="card">
     <h2>Results: DQN on Acrobot</h2>
 
+    <h3>Overview</h3>
+
     <p>
-        Add plots and discussion here.
+        Meaningful learning was achieved on Acrobot across several integrator and timestep configurations.
+        Acrobot is a relatively forgiving training environment: episodes do not terminate on the first mistake,
+        and the agent can explore the state space more freely before the episode ends.
+        This gives the replay buffer a chance to accumulate diverse, informative transitions across a range of system states.
+        The results reveal a complex and configuration-dependent picture of performance,
+        where the choice of integrator interacts with the physics of the task in non-obvious ways.
     </p>
+
+    <h3>Forward Euler Outperforms at Small and Medium Timesteps</h3>
+
+    <p>
+        Forward Euler consistently achieves strong performance across small and medium timesteps,
+        which at first appears surprising for the lowest-fidelity non-symplectic integrator.
+        The explanation lies in the nature of the Acrobot task itself.
+    </p>
+
+    <p>
+        The optimal control strategy for Acrobot is related to pumping energy into the double pendulum system
+        to raise the tip above the target height.
+        The policy essentially needs to exploit the system's natural dynamics to accumulate enough mechanical energy.
+        Forward Euler, as discussed in the background section, systematically overestimates energy at each step
+        due to its constant-derivative assumption.
+        This artificial energy injection acts as a tailwind for the task: the simulated pendulum gains energy
+        faster than a physically accurate system would, making it easier for the agent to discover the
+        high-reward region and receive the positive reinforcement needed to learn.
+        The agent effectively learns a policy shaped around an environment that is slightly easier than reality,
+        and that advantage is large enough to show up clearly in final returns.
+    </p>
+
+    <h3>Integrator Accuracy and Convergence at Large Timesteps</h3>
+
+    <p>
+        As \(\Delta t\) increases, the gap between Forward Euler and the other non-symplectic integrators narrows,
+        and by the largest timesteps most of them reach comparable performance.
+        The integrator accuracy plot below helps explain why.
+    </p>
+
+    <figure>
+        <img
+            src="DQN/results_acrobot/plots/integrator_accuracy_acrobot.png"
+            alt="Log-log plot of local truncation error versus timestep for each integrator on Acrobot dynamics."
+            style="max-width: 100%; border-radius: 8px;"
+        >
+        <figcaption>
+            Local truncation error versus timestep for each integrator applied to Acrobot dynamics.
+            At small timesteps, integrators separate clearly by their theoretical order.
+            At large timesteps, the errors of most methods converge toward a similar magnitude,
+            suggesting that the differences between them become less meaningful numerically.
+        </figcaption>
+    </figure>
+
+    <p>
+        At small timesteps, integrators are well separated by their theoretical convergence order:
+        RK4 produces far smaller errors than RK2, which in turn outperforms Forward Euler and Symplectic Euler.
+        However, at large timesteps all of the first and second-order methods cluster together at similarly high error levels.
+        When every integrator is producing large truncation errors, the qualitative difference between them matters less
+        to the RL agent than the overall character of the dynamics it experiences.
+        As a result, the performance advantage of Forward Euler relative to higher-order methods tends to shrink at large \(\Delta t\),
+        and the non-symplectic methods become more comparable in training outcome.
+    </p>
+
+    <p>
+        Interestingly, Forward Euler does extremely poorly at the largest tested timestep of \(\Delta t = 2\).
+        Its artificial energy injection, which was an advantage at moderate timesteps, becomes so severe at
+        \(\Delta t = 2\) that the simulated dynamics are completely unrealistic.
+        The agent has effectively been trained on a system so different from a plausible physical pendulum
+        that the learned policy is useless even within the same simulator.
+    </p>
+
+    <h3>Symplectic Euler Underperforms Despite Reasonable Accuracy</h3>
+
+    <p>
+        Symplectic Euler performs poorly across nearly all timestep configurations, which is puzzling at first
+        given that it sits alongside Forward Euler on the accuracy curve and is theoretically a more principled
+        integrator for Hamiltonian systems.
+        The key is that integrator accuracy and integrator behavior are not the same thing.
+    </p>
+
+    <p>
+        Symplectic Euler does not gain energy like Forward Euler, nor does it conserve it exactly.
+        At moderate to large timesteps it introduces numerical damping, systematically draining energy from the system.
+        For a task that requires pumping energy into a pendulum to reach a target height, an integrator that
+        removes energy is fundamentally at odds with what the task demands.
+        The agent trained under Symplectic Euler is trying to learn to swing up a pendulum that is fighting against
+        artificial dissipation, which requires more aggressive actions for the same result.
+        At larger timesteps the overdamping grows more severe, which explains why Symplectic Euler's performance
+        does not recover the way the other non-symplectic integrators do.
+        This is a clear example of why raw truncation error is an incomplete picture: what matters for RL
+        is not just how large the error is, but what kind of physical bias it introduces into the training environment.
+    </p>
+
+    <h3>DQN Learns Better at Larger Timesteps</h3>
+
+    <p>
+        Across most integrators, DQN tends to achieve better final returns when trained at larger timestep values.
+        With a fixed episode duration \(T_{\text{episode}}\), a larger \(\Delta t\) means fewer environment steps per episode.
+        Each individual action therefore has a larger effect on the system state, which gives the agent coarser
+        but more impactful control authority.
+        In a sparse-reward task like Acrobot, this can help the agent discover the goal state earlier in training,
+        providing the positive reinforcement signal that drives Q-value learning.
+        At very small timesteps, the agent must string together many more individually small actions to
+        swing the pendulum to the target, which makes the credit assignment problem harder and slows convergence.
+    </p>
+
+    <h3>Per-Timestep Training Curves</h3>
+
+    <p>
+        The figures below show training curves for each integrator at each of the seven tested timestep values.
+        These allow a more detailed view of how training stability and convergence speed vary across configurations.
+    </p>
+
+    <figure>
+        <img
+            src="DQN/results_acrobot/plots/comparison_dt_0.01.png"
+            alt="DQN Acrobot training curves for all integrators at dt=0.01"
+            style="max-width: 100%; border-radius: 8px;"
+        >
+        <figcaption>\(\Delta t = 0.01\)</figcaption>
+    </figure>
+
+    <figure>
+        <img
+            src="DQN/results_acrobot/plots/comparison_dt_0.05.png"
+            alt="DQN Acrobot training curves for all integrators at dt=0.05"
+            style="max-width: 100%; border-radius: 8px;"
+        >
+        <figcaption>\(\Delta t = 0.05\)</figcaption>
+    </figure>
+
+    <figure>
+        <img
+            src="DQN/results_acrobot/plots/comparison_dt_0.1.png"
+            alt="DQN Acrobot training curves for all integrators at dt=0.1"
+            style="max-width: 100%; border-radius: 8px;"
+        >
+        <figcaption>\(\Delta t = 0.1\)</figcaption>
+    </figure>
+
+    <figure>
+        <img
+            src="DQN/results_acrobot/plots/comparison_dt_0.5.png"
+            alt="DQN Acrobot training curves for all integrators at dt=0.5"
+            style="max-width: 100%; border-radius: 8px;"
+        >
+        <figcaption>\(\Delta t = 0.5\)</figcaption>
+    </figure>
+
+    <figure>
+        <img
+            src="DQN/results_acrobot/plots/comparison_dt_1.png"
+            alt="DQN Acrobot training curves for all integrators at dt=1"
+            style="max-width: 100%; border-radius: 8px;"
+        >
+        <figcaption>\(\Delta t = 1\)</figcaption>
+    </figure>
+
+    <figure>
+        <img
+            src="DQN/results_acrobot/plots/comparison_dt_1.5.png"
+            alt="DQN Acrobot training curves for all integrators at dt=1.5"
+            style="max-width: 100%; border-radius: 8px;"
+        >
+        <figcaption>\(\Delta t = 1.5\)</figcaption>
+    </figure>
+
+    <figure>
+        <img
+            src="DQN/results_acrobot/plots/comparison_dt_2.png"
+            alt="DQN Acrobot training curves for all integrators at dt=2"
+            style="max-width: 100%; border-radius: 8px;"
+        >
+        <figcaption>\(\Delta t = 2\)</figcaption>
+    </figure>
+
+    <h3>Transfer Evaluation</h3>
+
+    <p>
+        To assess how well policies trained under different simulator configurations generalize,
+        each trained policy was evaluated on a ground truth environment using RK4 at \(\Delta t = 0.01\),
+        the highest-fidelity configuration tested.
+        The heatmap below shows the transfer reward for every training integrator and timestep combination.
+    </p>
+
+    <figure>
+        <img
+            src="DQN/results_acrobot/plots/transfer_heatmap.png"
+            alt="Heatmap of DQN transfer reward on Acrobot evaluated on RK4 dt=0.01 ground truth."
+            style="max-width: 100%; border-radius: 8px;"
+        >
+        <figcaption>
+            Transfer reward for DQN policies trained under each integrator and timestep configuration,
+            evaluated on a ground truth simulator using RK4 at \(\Delta t = 0.01\).
+            Lighter cells indicate better transfer performance.
+        </figcaption>
+    </figure>
+
+    <p>
+        The transfer results show that policies trained at intermediate timesteps, particularly around
+        \(\Delta t = 0.1\), tend to transfer better to the ground truth environment than those trained
+        at very small or very large timesteps.
+        This is somewhat counterintuitive: one might expect that training at a small timestep close to
+        the ground truth \(\Delta t = 0.01\) would produce the most transferable policy.
+        However, at very small timesteps, agents appear to overfit to the specific numerical artifacts
+        of their training integrator. The fine-grained dynamics produced by each integrator at small \(\Delta t\)
+        are distinct from one another, and a policy tuned to exploit those subtleties does not necessarily
+        generalize to a different integrator, even at the same timestep.
+        At intermediate timesteps, the coarser dynamics may produce policies that are less finely tuned
+        and therefore more robust when transferred.
+    </p>
+
+    <p>
+        It is important to note that this is not a true sim-to-real evaluation.
+        The ground truth environment is still a simulation, and the RK4 \(\Delta t = 0.01\) configuration
+        itself did not learn well during training, as seen in the per-timestep plots above.
+        This means the transfer results are measuring how well policies transfer to a high-fidelity
+        simulator, not to a physical system, and the baseline they are being compared against is not
+        a strong performer in its own right.
+        Any conclusions about real-world deployability would require physical hardware validation,
+        which remains an open direction for future work.
+    </p>
+
 </section>
