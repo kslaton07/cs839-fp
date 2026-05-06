@@ -323,8 +323,46 @@
             <h2>Future Work</h2>
 
             <p>
-                Future directions include domain randomization and sim-to-real transfer studies.
+                I did intend on doing a domain randomization inspired training and evaluation, however I saw
+                that people online were able to get cartpole to learn with DQN, thus most of my time was spent
+                trying to get this to work on my end as well.
+                However, I do plan on doing this extension in the near future and updating the webpage accordingly
+                (as well as DQN training working on CartPole).
             </p>
+
+            <p>
+                Beyond completing the domain randomization experiments, there are several natural extensions
+                that this work motivates.
+            </p>
+
+            <h3>Physical hardware validation</h3>
+
+            <p>
+                A central limitation of this project is that all evaluation was performed in simulation.
+                Policies were trained and tested on the same simulated environment, which means that the
+                sim-to-real transfer problem was never directly confronted.
+                A meaningful next step would be to deploy learned policies on physical CartPole and Acrobot
+                hardware and measure how much real-world performance degrades relative to simulated performance.
+                This would turn the numerical integrator comparison into a genuine sim-to-real study, since
+                policies trained under high-fidelity or symplectic integrators may transfer more reliably
+                to physical hardware precisely because their training dynamics more accurately reflect
+                true conservative mechanics.
+            </p>
+
+            <h3>More complex environments</h3>
+
+            <p>
+                CartPole and Acrobot are useful benchmarks but are relatively low-dimensional systems.
+                Scaling this investigation to MuJoCo environments, which involve higher-dimensional state
+                spaces, contact dynamics, and more complex reward structures, would test whether the
+                relationships observed here generalize beyond simple pendulum-like systems.
+                MuJoCo's physics engine also exposes timestep and integrator configuration directly,
+                making it a natural platform for extending this line of work.
+                It is an open question whether the advantage of symplectic integrators or the sensitivity
+                to timestep observed here persists at the complexity of locomotion or manipulation tasks.
+            </p>
+
+        </section>
         </section>
 
     </main>
