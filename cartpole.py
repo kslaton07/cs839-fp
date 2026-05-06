@@ -14,10 +14,7 @@ IMPORTANT — state ordering:
   [x, x_dot, theta, theta_dot] so the agent sees a consistent interface.
 """
 import math
-from typing import Optional, Union
-
 import numpy as np
-
 import gymnasium as gym
 from gymnasium import Env, spaces
 from gymnasium.envs.classic_control import utils
