@@ -1,0 +1,379 @@
+<section id="background-integrators" class="card">
+
+    <h2>Background: Numerical Integrators</h2>
+
+    <p>
+        A numerical integrator approximates the continuous solution of a differential equation
+        by advancing the system state in discrete time steps of size \(\Delta t\).
+        For a system described by
+    </p>
+
+    <div class="equation-block">
+        \[
+        \dot{y} = f(t, y), \quad y(t_0) = y_0
+        \]
+    </div>
+
+    <p>
+        an integrator produces a sequence of states \(y_0, y_1, y_2, \ldots\) that approximates
+        the true solution \(y(t)\) at times \(t_0, t_0 + \Delta t, t_0 + 2\Delta t, \ldots\).
+        Every integrator makes assumptions about how the state changes within a single step,
+        and those assumptions determine both the accuracy of the approximation and whether
+        certain physical properties of the system are preserved.
+    </p>
+
+    <p>
+        The integrators used in this project fall into two categories: non-symplectic and symplectic.
+        Non-symplectic integrators are general-purpose methods that do not preserve the geometric
+        structure of Hamiltonian systems. Symplectic integrators are specifically designed for
+        Hamiltonian mechanics and preserve the symplectic structure of the phase space exactly,
+        which has important consequences for long-run energy behavior.
+    </p>
+
+    <h3>Non-Symplectic Integrators</h3>
+
+    <h4>Forward Euler</h4>
+
+    <p>
+        Forward Euler is the simplest explicit integrator.
+        Its core assumption is that the derivative \(f(t, y)\) remains constant throughout the entire step,
+        equal to its value at the beginning of the step.
+        The update rule is
+    </p>
+
+    <div class="equation-block">
+        \[
+        y_{n+1} = y_n + \Delta t \, f(t_n, y_n)
+        \]
+    </div>
+
+    <p>
+        Comparing this to a Taylor expansion of the true solution,
+    </p>
+
+    <div class="equation-block">
+        \[
+        y(t_n + \Delta t) = y(t_n) + \Delta t \, \dot{y}(t_n) + \frac{\Delta t^2}{2} \ddot{y}(t_n) + \cdots
+        \]
+    </div>
+
+    <p>
+        Forward Euler matches the first two terms and discards everything of order \(\Delta t^2\) and higher.
+        The local truncation error per step is therefore \(\mathcal{O}(\Delta t^2)\),
+        and the global error accumulated over a fixed interval is \(\mathcal{O}(\Delta t)\),
+        making it a first-order method.
+    </p>
+
+    <p>
+        For conservative mechanical systems, the constant-derivative assumption systematically overestimates
+        the total energy, causing the trajectory to spiral outward in phase space.
+        This energy drift worsens over time and can lead to unstable behavior in long simulations.
+    </p>
+
+    <h4>Implicit Euler</h4>
+
+    <p>
+        Implicit Euler makes the opposite assumption to Forward Euler: it treats the derivative as
+        constant throughout the step but evaluates it at the end of the step rather than the beginning.
+        The update rule is
+    </p>
+
+    <div class="equation-block">
+        \[
+        y_{n+1} = y_n + \Delta t \, f(t_{n+1}, y_{n+1})
+        \]
+    </div>
+
+    <p>
+        Because \(y_{n+1}\) appears on both sides, this is an implicit equation that typically
+        requires solving a nonlinear system at each step.
+        The local truncation error is \(\mathcal{O}(\Delta t^2)\) and the global error is \(\mathcal{O}(\Delta t)\),
+        so Implicit Euler is also first-order accurate.
+    </p>
+
+    <p>
+        Unlike Forward Euler, the end-of-step evaluation produces artificial numerical dissipation.
+        The method systematically underestimates the energy of the system,
+        causing the trajectory to spiral inward in phase space.
+        While this dissipation prevents the blow-up seen with Forward Euler,
+        it introduces a different form of systematic error: energy is removed from the system
+        at a rate that depends on \(\Delta t\).
+    </p>
+
+    <h4>Runge-Kutta 2 (RK2)</h4>
+
+    <p>
+        Runge-Kutta methods improve accuracy by evaluating the derivative at multiple points within
+        a single step and forming a weighted combination of those evaluations.
+        The second-order Runge-Kutta method (midpoint method) uses two evaluations.
+        It first takes a half-step using Forward Euler to estimate the midpoint derivative,
+        then uses that midpoint derivative to advance the full step.
+    </p>
+
+    <div class="equation-block">
+        \[
+        k_1 = f(t_n, y_n)
+        \]
+    </div>
+
+    <div class="equation-block">
+        \[
+        k_2 = f\!\left(t_n + \tfrac{\Delta t}{2},\; y_n + \tfrac{\Delta t}{2} k_1\right)
+        \]
+    </div>
+
+    <div class="equation-block">
+        \[
+        y_{n+1} = y_n + \Delta t \, k_2
+        \]
+    </div>
+
+    <p>
+        The assumption is that the midpoint derivative is a better representative of the average rate
+        of change over the interval than the initial derivative alone.
+        This cancels the leading-order error of Forward Euler, giving a local truncation error of
+        \(\mathcal{O}(\Delta t^3)\) and a global error of \(\mathcal{O}(\Delta t^2)\):
+        a second-order method.
+        RK2 does not preserve energy in conservative systems, but its energy drift is smaller than Forward Euler
+        for the same step size.
+    </p>
+
+    <h4>Runge-Kutta 4 (RK4)</h4>
+
+    <p>
+        RK4 is the classical fourth-order method.
+        It evaluates the derivative at four points within the step — the start, two midpoints,
+        and the end — and combines them with weights derived from Simpson's rule.
+    </p>
+
+    <div class="equation-block">
+        \[
+        k_1 = f(t_n,\; y_n)
+        \]
+    </div>
+
+    <div class="equation-block">
+        \[
+        k_2 = f\!\left(t_n + \tfrac{\Delta t}{2},\; y_n + \tfrac{\Delta t}{2} k_1\right)
+        \]
+    </div>
+
+    <div class="equation-block">
+        \[
+        k_3 = f\!\left(t_n + \tfrac{\Delta t}{2},\; y_n + \tfrac{\Delta t}{2} k_2\right)
+        \]
+    </div>
+
+    <div class="equation-block">
+        \[
+        k_4 = f\!\left(t_n + \Delta t,\; y_n + \Delta t \, k_3\right)
+        \]
+    </div>
+
+    <div class="equation-block">
+        \[
+        y_{n+1} = y_n + \frac{\Delta t}{6}\left(k_1 + 2k_2 + 2k_3 + k_4\right)
+        \]
+    </div>
+
+    <p>
+        The assumption is that a Simpson-weighted average of these four slope estimates approximates
+        the integral of \(f\) over the interval far more accurately than any single evaluation.
+        The local truncation error is \(\mathcal{O}(\Delta t^5)\) and the global error is \(\mathcal{O}(\Delta t^4)\).
+        RK4 can therefore use much larger step sizes than Forward Euler to achieve the same accuracy,
+        but each step requires four evaluations of \(f\) rather than one.
+        Like all Runge-Kutta methods, RK4 is non-symplectic and will still exhibit slow energy drift
+        in very long simulations of conservative systems.
+    </p>
+
+    <h3>Symplectic Integrators</h3>
+
+    <p>
+        Many physical systems are Hamiltonian: their dynamics can be described by a Hamiltonian function
+        \(H(q, p)\) where \(q\) is the generalized position and \(p\) is the generalized momentum.
+        The equations of motion are
+    </p>
+
+    <div class="equation-block">
+        \[
+        \dot{q} = \frac{\partial H}{\partial p}, \qquad \dot{p} = -\frac{\partial H}{\partial q}
+        \]
+    </div>
+
+    <p>
+        A key property of Hamiltonian flow is that it is symplectic: it exactly preserves the
+        symplectic two-form \(\omega = dq \wedge dp\), which corresponds physically to conservation
+        of phase-space volume (Liouville's theorem) and, over long time horizons, near-conservation of energy.
+    </p>
+
+    <p>
+        Non-symplectic integrators do not preserve this structure.
+        Their numerical trajectories live on a slightly different effective Hamiltonian that drifts
+        away from the true Hamiltonian over time, causing secular energy error.
+        Symplectic integrators, by contrast, exactly satisfy a modified Hamiltonian that is \(\mathcal{O}(\Delta t^p)\)
+        close to the true one. As a result, energy oscillates around the true value rather than drifting
+        monotonically, which makes symplectic methods much better suited to long simulations of
+        conservative mechanical systems.
+    </p>
+
+    <h4>Symplectic Euler</h4>
+
+    <p>
+        Symplectic Euler is the simplest symplectic integrator.
+        It resembles Forward Euler but breaks the position and momentum updates apart
+        so that one uses the updated value of the other.
+        For a separable Hamiltonian \(H(q,p) = T(p) + V(q)\), the update is
+    </p>
+
+    <div class="equation-block">
+        \[
+        p_{n+1} = p_n - \Delta t \, \frac{\partial V}{\partial q}(q_n)
+        \]
+    </div>
+
+    <div class="equation-block">
+        \[
+        q_{n+1} = q_n + \Delta t \, \frac{\partial T}{\partial p}(p_{n+1})
+        \]
+    </div>
+
+    <p>
+        The key assumption is the sequential update: the momentum is advanced first using
+        the old position, then the position is advanced using the new momentum.
+        This asymmetry is what makes the method symplectic.
+        Symplectic Euler is first-order accurate (global error \(\mathcal{O}(\Delta t)\)),
+        so its per-step approximation is no better than Forward Euler,
+        but it does not accumulate systematic energy error.
+        Energy oscillates around its true value by an amount proportional to \(\Delta t\) rather than drifting.
+    </p>
+
+    <h4>Verlet</h4>
+
+    <p>
+        The Verlet integrator (specifically the velocity Verlet form) is a second-order symplectic method.
+        It derives from assuming that the force (and therefore acceleration) is approximately constant
+        over a half-step, and uses a staggered update for positions and velocities.
+    </p>
+
+    <div class="equation-block">
+        \[
+        q_{n+1} = q_n + \Delta t \, v_n + \frac{\Delta t^2}{2} a_n
+        \]
+    </div>
+
+    <div class="equation-block">
+        \[
+        a_{n+1} = -\frac{1}{m}\frac{\partial V}{\partial q}(q_{n+1})
+        \]
+    </div>
+
+    <div class="equation-block">
+        \[
+        v_{n+1} = v_n + \frac{\Delta t}{2}\left(a_n + a_{n+1}\right)
+        \]
+    </div>
+
+    <p>
+        Here \(a_n\) is the acceleration at step \(n\), computed from the force at position \(q_n\).
+        The position update uses the second-order Taylor expansion (the half-step acceleration assumption),
+        and the velocity update averages the accelerations at the start and end of the step.
+        This averaging is what gives Verlet its second-order accuracy: global error \(\mathcal{O}(\Delta t^2)\).
+    </p>
+
+    <p>
+        Verlet is also time-reversible: replacing \(\Delta t\) with \(-\Delta t\) and running the
+        integrator backward exactly retraces the forward trajectory.
+        This time-reversibility is another geometric property of Hamiltonian flow that non-symplectic
+        methods do not preserve.
+        Combined with its symplectic character, Verlet provides substantially better long-run
+        energy conservation than RK2, despite having the same formal order of accuracy.
+    </p>
+
+    <h3>Summary</h3>
+
+    <p>
+        The table below summarizes the key properties of each integrator.
+        Fidelity increases from Forward Euler to RK4 among the non-symplectic methods.
+        Symplectic methods occupy a separate class where the global truncation order
+        is less important than the preservation of the underlying Hamiltonian structure.
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Integrator</th>
+                <th>Category</th>
+                <th>Global order</th>
+                <th>Function evaluations per step</th>
+                <th>Energy behavior</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Forward Euler</td>
+                <td>Non-symplectic</td>
+                <td>\(\mathcal{O}(\Delta t)\)</td>
+                <td>1</td>
+                <td>Drift (gain)</td>
+            </tr>
+            <tr>
+                <td>Implicit Euler</td>
+                <td>Non-symplectic</td>
+                <td>\(\mathcal{O}(\Delta t)\)</td>
+                <td>1 (implicit solve)</td>
+                <td>Drift (dissipation)</td>
+            </tr>
+            <tr>
+                <td>RK2</td>
+                <td>Non-symplectic</td>
+                <td>\(\mathcal{O}(\Delta t^2)\)</td>
+                <td>2</td>
+                <td>Slow drift</td>
+            </tr>
+            <tr>
+                <td>RK4</td>
+                <td>Non-symplectic</td>
+                <td>\(\mathcal{O}(\Delta t^4)\)</td>
+                <td>4</td>
+                <td>Very slow drift</td>
+            </tr>
+            <tr>
+                <td>Symplectic Euler</td>
+                <td>Symplectic</td>
+                <td>\(\mathcal{O}(\Delta t)\)</td>
+                <td>1</td>
+                <td>Bounded oscillation</td>
+            </tr>
+            <tr>
+                <td>Verlet</td>
+                <td>Symplectic</td>
+                <td>\(\mathcal{O}(\Delta t^2)\)</td>
+                <td>2</td>
+                <td>Bounded oscillation</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>Connection to This Project</h3>
+
+    <p>
+        In this project, the environment simulator uses a numerical integrator to advance the
+        physical state of the system at each decision step.
+        The integrator is therefore part of the training environment seen by the RL agent.
+        Different integrators produce different trajectories from the same initial condition,
+        which means the agent observes different state sequences, receives different rewards,
+        and may encounter different termination behavior depending on which integrator is used.
+    </p>
+
+    <p>
+        Non-symplectic integrators such as Forward Euler can introduce artificial energy gain
+        that makes the system appear more unstable than it truly is.
+        Implicit Euler introduces artificial damping that may make the task appear easier to control.
+        Symplectic integrators preserve the conservative character of the system more faithfully,
+        but their qualitative advantage over high-order non-symplectic methods such as RK4
+        depends on the length of the trajectory and the sensitivity of the reward to energy errors.
+        These differences motivate comparing trained policies across integrators,
+        rather than treating the simulator as a neutral tool whose numerical details are irrelevant.
+    </p>
+
+</section>

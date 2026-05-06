@@ -19,6 +19,7 @@ import gymnasium as gym
 from gymnasium import Env, spaces
 from gymnasium.envs.classic_control import utils
 from gymnasium.error import DependencyNotInstalled
+from integrators import rk4, rk2, feuler, seuler, ieuler, vverlet
 
 
 class CartPoleEnv(Env):

@@ -87,7 +87,8 @@
     </section>
 
 
-        <div id="background-container"></div>
+        <div id="background-rl"></div>
+        <div id="background-integrators"></div>
 
         <section id="methodology" class="card">
             <h2>Methodology</h2>
@@ -141,10 +142,22 @@
     </script>
 
     <script>
-        fetch("HTML/background.html")
+        fetch("HTML/background_rl.html")
             .then(response => response.text())
             .then(html => {
-                document.getElementById("background-container").innerHTML = html;
+                document.getElementById("background-rl").innerHTML = html;
+
+                if (window.MathJax) {
+                    MathJax.typesetPromise();
+                }
+            });
+    </script>
+
+        <script>
+        fetch("HTML/background_integrators.html")
+            .then(response => response.text())
+            .then(html => {
+                document.getElementById("background-integrators").innerHTML = html;
 
                 if (window.MathJax) {
                     MathJax.typesetPromise();
