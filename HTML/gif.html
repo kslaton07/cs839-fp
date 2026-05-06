@@ -1,0 +1,133 @@
+<section id="acrobot-policy-gifs" class="card">
+    <h2>Policy Visualizations</h2>
+
+    <p>
+        The following GIFs show representative learned Acrobot policies for the most visually
+        informative integrator and timestep configurations. These examples highlight how the
+        learned behavior depends not only on the reinforcement learning algorithm, but also on
+        the numerical simulation configuration used during training.
+    </p>
+
+    <h3>DQN Acrobot Policies</h3>
+
+    <div class="gif-grid">
+        <figure class="gif-card">
+            <img
+                src="GIFS/dqn_feuler_dt0p05.gif"
+                alt="DQN Acrobot policy trained with Forward Euler integrator and timestep 0.05"
+            >
+            <figcaption>
+                <strong>DQN — Forward Euler, \(\Delta t = 0.05\)</strong>
+                <br>
+                DQN's cleanest learner and strongest mid-range timestep example.
+            </figcaption>
+        </figure>
+
+        <figure class="gif-card">
+            <img
+                src="GIFS/dqn_rk4_dt1.gif"
+                alt="DQN Acrobot policy trained with RK4 integrator and timestep 1"
+            >
+            <figcaption>
+                <strong>DQN — RK4, \(\Delta t = 1\)</strong>
+                <br>
+                A visually striking late-episode breakthrough, corresponding to the sharp
+                hockey-stick improvement observed during training.
+            </figcaption>
+        </figure>
+
+        <figure class="gif-card">
+            <img
+                src="GIFS/dqn_feuler_dt0p01.gif"
+                alt="DQN Acrobot policy trained with Forward Euler integrator and timestep 0.01"
+            >
+            <figcaption>
+                <strong>DQN — Forward Euler, \(\Delta t = 0.01\)</strong>
+                <br>
+                The main small-timestep learner, illustrating the role of Forward Euler's
+                numerical energy injection in the learned swing-up behavior.
+            </figcaption>
+        </figure>
+    </div>
+
+    <h3>PPO Acrobot Policies</h3>
+
+    <div class="gif-grid">
+        <figure class="gif-card">
+            <img
+                src="GIFS/ppo_feuler_dt0p05.gif"
+                alt="PPO Acrobot policy trained with Forward Euler integrator and timestep 0.05"
+            >
+            <figcaption>
+                <strong>PPO — Forward Euler, \(\Delta t = 0.05\)</strong>
+                <br>
+                PPO's strongest configuration, showing rapid early improvement followed by a
+                high-performance plateau.
+            </figcaption>
+        </figure>
+
+        <figure class="gif-card">
+            <img
+                src="GIFS/ppo_rk4_dt1.gif"
+                alt="PPO Acrobot policy trained with RK4 integrator and timestep 1"
+            >
+            <figcaption>
+                <strong>PPO — RK4, \(\Delta t = 1\)</strong>
+                <br>
+                A clean late breakthrough case in which the policy crosses the solve threshold
+                after initially slower learning.
+            </figcaption>
+        </figure>
+
+        <figure class="gif-card">
+            <img
+                src="GIFS/ppo_rk2_dt0p1.gif"
+                alt="PPO Acrobot policy trained with RK2 integrator and timestep 0.1"
+            >
+            <figcaption>
+                <strong>PPO — RK2, \(\Delta t = 0.1\)</strong>
+                <br>
+                A medium-timestep configuration that clearly shows ordering effects across
+                numerical integrators.
+            </figcaption>
+        </figure>
+    </div>
+</section>
+
+<style>
+    .gif-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 1.5rem;
+        margin-top: 1rem;
+        margin-bottom: 2rem;
+    }
+
+    .gif-card {
+        margin: 0;
+        padding: 1rem;
+        border: 1px solid #ddd;
+        border-radius: 12px;
+        background: #ffffff;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    }
+
+    .gif-card img {
+        width: 100%;
+        height: auto;
+        display: block;
+        border-radius: 8px;
+        background: #f5f5f5;
+    }
+
+    .gif-card figcaption {
+        margin-top: 0.75rem;
+        font-size: 0.95rem;
+        line-height: 1.45;
+        color: #333;
+    }
+
+    .gif-card strong {
+        color: #111;
+    }
+</style>
