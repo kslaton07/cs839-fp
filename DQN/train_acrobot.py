@@ -64,20 +64,19 @@ INTEGRATORS = {
     "vverlet": vverlet,
 }
 
-TIMESTEPS = [1e-2, 5e-2, 1e-1, 0.5, 1, 1.5, 2]
+TIMESTEPS = [0.01, 0.05, 0.1, 0.5, 1, 1.5, 2]
 
 NUM_EPISODES    = 500
 SOLVE_THRESHOLD = -80
 SMOOTH_WINDOW   = 20
 SEED            = 42
-MIN_BUFFER      = 5000   # don't start training until buffer has this many transitions
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Replay buffer
 # ─────────────────────────────────────────────────────────────────────────────
 class ReplayBuffer:
-    def __init__(self, capacity=50_000):
+    def __init__(self, capacity=200_000):
         self.buf = collections.deque(maxlen=capacity)
 
     def push(self, s, a, r, s2, done):
@@ -105,51 +104,79 @@ def train_one(integrator_name, dt, seed=SEED):
     from dqn import DQN
 
     _integrators = {
-        "rk4": rk4, "rk2": rk2, "feuler": feuler,
-        "seuler": seuler, "ieuler": ieuler, "vverlet": vverlet,
+        "rk4": rk4,
+        "rk2": rk2,
+        "feuler": feuler,
+        "seuler": seuler,
+        "ieuler": ieuler,
+        "vverlet": vverlet,
     }
+
     integrator_fn = _integrators[integrator_name]
 
     random.seed(seed)
     np.random.seed(seed)
 
-    env    = AcrobotEnv(integrator=integrator_fn, dt=dt)
+    env = AcrobotEnv(integrator=integrator_fn, dt=dt)
     obs, _ = env.reset(seed=seed)
-    obs_dim, n_actions = obs.shape[0], env.action_space.n
 
+    obs_dim = obs.shape[0]
+    n_actions = env.action_space.n
+
+    # Each episode covers ~100 seconds of simulated time.
     MAX_STEPS = int(100 / dt)
+
+    # Scale epsilon decay by number of steps so exploration lasts comparable sim-time.
     eps_decay = MAX_STEPS * 5
 
-    agent  = DQN(obs_dim, n_actions, eps_decay=eps_decay, seed=seed)
+    # Warm up replay buffer for the same number of episodes/sim-time across dt.
+    WARMUP_EPISODES = 5
+    MIN_BUFFER = WARMUP_EPISODES * MAX_STEPS
+
+    # Do DQN updates at a fixed simulation-time interval, not every raw step.
+    UPDATE_PERIOD_SIM_TIME = 0.1
+    update_every_steps = max(1, int(round(UPDATE_PERIOD_SIM_TIME / dt)))
+
+    agent = DQN(obs_dim, n_actions, eps_decay=eps_decay, seed=seed)
     replay = ReplayBuffer()
 
-    episode_rewards   = []
-    smoothed_rewards  = []
+    episode_rewards = []
+    smoothed_rewards = []
     episodes_to_solve = None
-    nan_events        = 0
-    wall_start        = time.perf_counter()
+    nan_events = 0
+
+    wall_start = time.perf_counter()
 
     for ep in range(NUM_EPISODES):
         obs, _ = env.reset()
         total_reward = 0.0
 
-        for _ in range(MAX_STEPS):
+        for step_idx in range(MAX_STEPS):
             action = agent.select_action(obs)
-            next_obs, reward, terminated, truncated, _ = env.step(action)
-            reward *= dt   # scale reward to sim-time units (returns comparable across dt)
 
+            next_obs, reward, terminated, truncated, _ = env.step(action)
+
+            # Scale reward so return is comparable across dt.
+            reward *= dt
+
+            # Catch numerical instability from simulator/integrator.
             if not np.all(np.isfinite(next_obs)):
                 nan_events += 1
-                next_obs   = obs.copy()
+                next_obs = obs.copy()
                 terminated = True
 
-            replay.push(obs, action, reward, next_obs, terminated or truncated)
-            agent.update(replay, MIN_BUFFER)
+            done = terminated or truncated
 
-            obs          = next_obs
+            replay.push(obs, action, reward, next_obs, done)
+
+            # Train only every fixed amount of simulated time.
+            if step_idx % update_every_steps == 0:
+                agent.update(replay, MIN_BUFFER)
+
+            obs = next_obs
             total_reward += reward
 
-            if terminated or truncated:
+            if done:
                 break
 
         episode_rewards.append(total_reward)
@@ -158,8 +185,11 @@ def train_one(integrator_name, dt, seed=SEED):
         smooth = float(np.mean(window))
         smoothed_rewards.append(smooth)
 
-        if episodes_to_solve is None and len(window) == SMOOTH_WINDOW \
-                and smooth >= SOLVE_THRESHOLD:
+        if (
+            episodes_to_solve is None
+            and len(window) == SMOOTH_WINDOW
+            and smooth >= SOLVE_THRESHOLD
+        ):
             episodes_to_solve = ep + 1
 
     wall_time = time.perf_counter() - wall_start
@@ -169,15 +199,15 @@ def train_one(integrator_name, dt, seed=SEED):
     agent.save(weight_path)
 
     return {
-        "integrator":        integrator_name,
-        "dt":                dt,
-        "episode_rewards":   episode_rewards,
-        "smoothed_rewards":  smoothed_rewards,
+        "integrator": integrator_name,
+        "dt": dt,
+        "episode_rewards": episode_rewards,
+        "smoothed_rewards": smoothed_rewards,
         "episodes_to_solve": episodes_to_solve,
-        "wall_time_s":       round(wall_time, 2),
-        "nan_events":        nan_events,
-        "final_smooth":      round(smoothed_rewards[-1], 2),
-        "weight_path":       weight_path,
+        "wall_time_s": round(wall_time, 2),
+        "nan_events": nan_events,
+        "final_smooth": round(smoothed_rewards[-1], 2),
+        "weight_path": weight_path,
     }
 
 
@@ -194,13 +224,27 @@ def main():
                for name in INTEGRATORS
                for dt in TIMESTEPS]
 
-    print(f"Running {len(configs)} configurations x {NUM_EPISODES} episodes each (parallel via Ray).\n")
+    MAX_PARALLEL = 12
 
-    pending_map = {
-        train_one.remote(name, dt): (name, dt)
-        for name, dt in configs
-    }
+    print(
+        f"Running {len(configs)} configurations x {NUM_EPISODES} episodes each "
+        f"(Ray, max {MAX_PARALLEL} at a time).\n"
+    )
 
+    config_iter = iter(configs)
+    pending_map = {}
+
+    # Launch initial batch only
+    for _ in range(MAX_PARALLEL):
+        try:
+            name, dt = next(config_iter)
+        except StopIteration:
+            break
+
+        ref = train_one.remote(name, dt)
+        pending_map[ref] = (name, dt)
+
+    # As each job finishes, launch one more
     while pending_map:
         done_refs, _ = ray.wait(list(pending_map.keys()), num_returns=1)
         done_ref = done_refs[0]
@@ -216,6 +260,14 @@ def main():
             all_results.append(result)
         except Exception as e:
             print(f"  ERROR: {name}  dt={dt}  ({e})")
+
+        # Launch next config after one finishes
+        try:
+            name, dt = next(config_iter)
+            ref = train_one.remote(name, dt)
+            pending_map[ref] = (name, dt)
+        except StopIteration:
+            pass
 
     with open(f"{RESULTS_DIR}/metrics.json", "w") as f:
         json.dump(all_results, f, indent=2)

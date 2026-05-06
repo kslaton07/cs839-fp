@@ -120,3 +120,31 @@ body {
         font-size: 2rem;
     }
 }
+
+.card h3 {
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+
+    color: #7d5ba6;
+}
+
+.card ul {
+    margin-left: 1.5rem;
+    margin-top: 1rem;
+    margin-bottom: 1rem;
+}
+
+.card li {
+    margin-bottom: 0.75rem;
+}
+
+.equation-block {
+    overflow-x: auto;
+
+    margin: 1rem 0;
+    padding: 1rem;
+
+    background-color: #f7f4fb;
+
+    border-radius: 12px;
+}

@@ -19,6 +19,7 @@
 
         <div class="nav-links">
             <a href="#abstract">Abstract</a>
+            <a href="#background">Background</a>
             <a href="#methodology">Methodology</a>
             <a href="#results">Results</a>
             <a href="#future">Future Work</a>
@@ -27,11 +28,11 @@
 
     <header class="hero">
         <h1>
-            RL Policy Sensitivity to Numerical Integrators
+            Training Agents in Simulation: How Numerical Integrators Influence Learned Behavior 
         </h1>
 
         <p class="subtitle">
-            Investigating how simulator solver configuration impacts learned control policies
+            A study of timestep and solver effects in reinforcement learning environments
         </p>
     </header>
 
@@ -41,10 +42,24 @@
             <h2>Abstract</h2>
 
             <p>
-                This project studies how reinforcement learning policies are affected by
-                numerical integrator choice and timestep size within simulation environments.
+                Reinforcement learning agents are commonly trained in simulation under the assumption that learned behavior is largely invariant to simulator configuration. 
+                However, because simulated environments are generated through numerical integration, timestep size and integrator selection directly influence the dynamics 
+                experienced during training.
+
+                This project investigates how simulation configuration affects learned reinforcement learning behavior across classical control environments. Multiple 
+                numerical integrators, including Forward Euler, Symplectic Euler, Velocity Verlet, RK2, RK4, and Implicit Euler, were evaluated across a range of timestep 
+                values using DQN and PPO agents in Acrobot and Cartpole environments.
+
+                Results demonstrate a complex relationship between reinforcement learning algorithms and simulator configuration.
+
+                Training stability, convergence behavior, and transfer performance varied substantially across timesteps and integrators, suggesting that agents may partially 
+                adapt to numerical artifacts introduced by the simulator itself.
+
+                These findings motivate further investigation into simulation aware training and simulator configuration as a potential domain randomization technique.
             </p>
         </section>
+
+        <div id="background-container"></div>
 
         <section id="methodology" class="card">
             <h2>Methodology</h2>
@@ -72,6 +87,46 @@
         </section>
 
     </main>
+
+        <section id="future" class="card">
+            <h2>Future Work</h2>
+
+            <p>
+                Future directions include domain randomization and sim-to-real transfer studies.
+            </p>
+        </section>
+
+    </main>
+
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [["\\(", "\\)"]],
+                displayMath: [["\\[", "\\]"]]
+            }
+        };
+    </script>
+
+    <script
+        src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"
+        async>
+    </script>
+
+    <script>
+        fetch("HTML/background.html")
+            .then(response => response.text())
+            .then(html => {
+                document.getElementById("background-container").innerHTML = html;
+
+                if (window.MathJax) {
+                    MathJax.typesetPromise();
+                }
+            });
+    </script>
+
+</body>
+
+</html>
 
 </body>
 

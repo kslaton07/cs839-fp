@@ -1,0 +1,461 @@
+<section id="background" class="card">
+
+    <h2>Background: Reinforcement Learning Algorithms</h2>
+
+    <p>
+        This project studies how numerical simulation choices affect reinforcement learning agents.
+        The main reinforcement learning algorithms used were Deep Q-Networks (DQN) and Proximal Policy Optimization (PPO).
+        Both algorithms train an agent to make decisions from interaction data, but they represent and update the policy in different ways.
+    </p>
+
+    <p>
+        In reinforcement learning, the agent interacts with an environment over discrete decision steps.
+        At step \(t\), the agent observes a state \(s_t \in \mathcal{S}\), selects an action \(a_t \in \mathcal{A}\),
+        receives a reward \(r_t \in \mathbb{R}\), and transitions to a next state \(s_{t+1}\).
+    </p>
+
+    <p>
+        The goal is to learn a policy \(\pi\) that selects actions in order to maximize expected discounted return.
+        The discounted return from time \(t\) is defined as
+    </p>
+
+    <div class="equation-block">
+        \[
+        G_t = \sum_{k=0}^{\infty} \gamma^k r_{t+k}
+        \]
+    </div>
+
+    <p>
+        where \(\gamma \in [0,1]\) is the discount factor.
+        A larger \(\gamma\) makes the agent care more about long-term rewards.
+        A smaller \(\gamma\) makes the agent focus more heavily on immediate rewards.
+    </p>
+
+    <h3>Q-Learning</h3>
+
+    <p>
+        Q-learning is a value-based reinforcement learning algorithm.
+        Instead of directly learning a policy, it learns an action-value function.
+        The action-value function is denoted
+    </p>
+
+    <div class="equation-block">
+        \[
+        Q(s,a)
+        \]
+    </div>
+
+    <p>
+        This quantity estimates how good it is to take action \(a\) in state \(s\),
+        assuming the agent behaves optimally after that action.
+    </p>
+
+    <p>
+        The central update target in Q-learning is
+    </p>
+
+    <div class="equation-block">
+        \[
+        y = r + \gamma \max_{a'} Q(s', a')
+        \]
+    </div>
+
+    <p>
+        In this expression, \(s\) is the current state, \(a\) is the action taken,
+        \(r\) is the reward received, \(s'\) is the next state, and \(a'\) ranges over possible next actions.
+        The term \(\max_{a'} Q(s', a')\) estimates the value of the best action available from the next state.
+    </p>
+
+    <p>
+        In tabular Q-learning, the value \(Q(s,a)\) is stored in a table.
+        This works when the number of possible states and actions is small.
+        However, for continuous or high-dimensional states, a table is not practical.
+    </p>
+
+    <h3>Deep Q-Networks</h3>
+
+    <p>
+        Deep Q-Networks extend Q-learning by replacing the Q-table with a neural network.
+        The neural network approximates the action-value function.
+        Instead of storing one table entry for each state-action pair, the network learns a function mapping states to Q-values.
+    </p>
+
+    <div class="equation-block">
+        \[
+        Q_{\theta}(s,a) \approx Q(s,a)
+        \]
+    </div>
+
+    <p>
+        Here, \(\theta\) denotes the trainable parameters of the neural network.
+        For a discrete action space, the network usually takes the state as input and outputs one Q-value per possible action.
+    </p>
+
+    <div class="equation-block">
+        \[
+        Q_{\theta}(s) =
+        \begin{bmatrix}
+        Q_{\theta}(s,a_1) \\
+        Q_{\theta}(s,a_2) \\
+        \vdots \\
+        Q_{\theta}(s,a_n)
+        \end{bmatrix}
+        \]
+    </div>
+
+    <p>
+        The selected greedy action is then
+    </p>
+
+    <div class="equation-block">
+        \[
+        a^* = \arg\max_a Q_{\theta}(s,a)
+        \]
+    </div>
+
+    <p>
+        During training, DQN also uses exploration.
+        In this project, the DQN agent used an \(\epsilon\)-greedy policy.
+        With probability \(\epsilon\), the agent selects a random action.
+        With probability \(1-\epsilon\), it selects the action with the largest predicted Q-value.
+    </p>
+
+    <div class="equation-block">
+        \[
+        a_t =
+        \begin{cases}
+        \text{random action}, & \text{with probability } \epsilon \\
+        \arg\max_a Q_{\theta}(s_t,a), & \text{with probability } 1-\epsilon
+        \end{cases}
+        \]
+    </div>
+
+    <h3>Online Network and Target Network</h3>
+
+    <p>
+        DQN uses two neural networks.
+        The first is the online network, also called the worker network.
+        The second is the target network.
+    </p>
+
+    <p>
+        The online network has parameters \(\theta\).
+        This is the network that is actively trained by gradient descent.
+        It predicts the current estimate \(Q_{\theta}(s,a)\).
+    </p>
+
+    <p>
+        The target network has parameters \(\theta^{-}\).
+        It is a delayed copy of the online network.
+        It is used to compute a more stable bootstrapped target.
+    </p>
+
+    <div class="equation-block">
+        \[
+        y =
+        r + \gamma \max_{a'} Q_{\theta^{-}}(s',a')
+        \]
+    </div>
+
+    <p>
+        The loss compares the online network prediction for the action actually taken
+        against the target computed using the target network.
+    </p>
+
+    <div class="equation-block">
+        \[
+        L(\theta) =
+        \mathcal{L}
+        \left(
+        Q_{\theta}(s,a),
+        r + \gamma \max_{a'} Q_{\theta^{-}}(s',a')
+        \right)
+        \]
+    </div>
+
+    <p>
+        It is important that the loss does not compare
+        \(\max_a Q_{\theta}(s,a)\) against \(\max_a Q_{\theta^{-}}(s,a)\).
+        Instead, it compares the online network prediction for the action that was actually taken,
+        \(Q_{\theta}(s,a)\), against a target based on the reward and the next state.
+    </p>
+
+    <p>
+        The target network is periodically synchronized with the online network:
+    </p>
+
+    <div class="equation-block">
+        \[
+        \theta^{-} \leftarrow \theta
+        \]
+    </div>
+
+    <p>
+        This delayed update is useful because it prevents the target from changing after every gradient update.
+        Without a target network, the online network would be chasing a moving target that it creates itself.
+        The target network therefore improves training stability.
+    </p>
+
+    <h3>Replay Buffer</h3>
+
+    <p>
+        DQN also uses a replay buffer.
+        The replay buffer stores past transitions of the form
+    </p>
+
+    <div class="equation-block">
+        \[
+        (s_t, a_t, r_t, s_{t+1}, d_t)
+        \]
+    </div>
+
+    <p>
+        where \(d_t\) indicates whether the episode ended after that transition.
+        During training, batches of transitions are sampled from the replay buffer.
+        This makes the training data less correlated than directly training on only the newest transition.
+    </p>
+
+    <p>
+        In this project, replay warmup was used before training began.
+        This means the agent first collected a minimum number of transitions before performing neural network updates.
+        Because timestep size changes the number of environment steps per unit simulation time,
+        the replay warmup was scaled with the timestep.
+    </p>
+
+    <div class="equation-block">
+        \[
+        N_{\text{steps}} = \frac{T_{\text{episode}}}{\Delta t}
+        \]
+    </div>
+
+    <div class="equation-block">
+        \[
+        N_{\text{warmup}} =
+        N_{\text{warmup episodes}}
+        \cdot
+        N_{\text{steps}}
+        \]
+    </div>
+
+    <p>
+        Here, \(T_{\text{episode}}\) is the simulated duration of one episode,
+        \(\Delta t\) is the simulator timestep, and \(N_{\text{warmup}}\) is the minimum replay buffer size before training begins.
+        This scaling ensures that different timestep configurations receive comparable simulated-time exposure before learning starts.
+    </p>
+
+    <h3>DQN Training Configuration</h3>
+
+    <p>
+        The DQN implementation used several engineering choices to improve training stability.
+        These choices did not change the core algorithm, but they made the neural network updates more robust.
+    </p>
+
+    <ul>
+        <li>
+            <strong>Huber loss:</strong>
+            Used instead of mean squared error to reduce the effect of very large temporal-difference errors.
+        </li>
+
+        <li>
+            <strong>Adam optimizer:</strong>
+            Used instead of plain stochastic gradient descent to adapt learning rates parameter by parameter.
+        </li>
+
+        <li>
+            <strong>Global norm gradient clipping:</strong>
+            Used to limit the total gradient magnitude while preserving the overall gradient direction.
+        </li>
+
+        <li>
+            <strong>Larger hidden layers:</strong>
+            The hidden size was increased from 64 to 128 to give the network more representational capacity.
+        </li>
+
+        <li>
+            <strong>Replay warmup:</strong>
+            Training was delayed until the replay buffer contained enough transitions.
+        </li>
+    </ul>
+
+    <p>
+        The Huber loss is defined as
+    </p>
+
+    <div class="equation-block">
+        \[
+        \mathcal{L}_{\delta}(e) =
+        \begin{cases}
+        \frac{1}{2}e^2, & |e| \leq \delta \\
+        \delta \left(|e| - \frac{1}{2}\delta\right), & |e| > \delta
+        \end{cases}
+        \]
+    </div>
+
+    <p>
+        where
+    </p>
+
+    <div class="equation-block">
+        \[
+        e =
+        Q_{\theta}(s,a)
+        -
+        \left(
+        r + \gamma \max_{a'} Q_{\theta^{-}}(s',a')
+        \right)
+        \]
+    </div>
+
+    <p>
+        For small errors, Huber loss behaves like mean squared error.
+        For large errors, it grows more slowly.
+        This is helpful in DQN because early Q-value estimates can be very inaccurate.
+    </p>
+
+    <h3>Training Across Different Timesteps</h3>
+
+    <p>
+        This project compares agents trained under different simulator timesteps.
+        To avoid giving some timestep configurations more simulated experience than others,
+        each episode was scaled to cover the same amount of simulated time.
+    </p>
+
+    <div class="equation-block">
+        \[
+        N_{\text{steps per episode}} =
+        \frac{100}{\Delta t}
+        \]
+    </div>
+
+    <p>
+        Rewards were also scaled by \(\Delta t\) so that total episode return remained comparable across timestep values.
+    </p>
+
+    <div class="equation-block">
+        \[
+        r_t^{\text{scaled}} = \Delta t \, r_t
+        \]
+    </div>
+
+    <p>
+        This is important because smaller timesteps produce more decision steps per episode.
+        Without reward scaling, small-timestep configurations could accumulate larger-magnitude returns simply because they take more steps.
+    </p>
+
+    <p>
+        The DQN update frequency was also scaled by simulation time.
+        Rather than updating the neural network after every raw environment step,
+        updates were performed after a fixed interval of simulated time.
+    </p>
+
+    <div class="equation-block">
+        \[
+        N_{\text{update interval}} =
+        \max
+        \left(
+        1,
+        \text{round}
+        \left(
+        \frac{T_{\text{update}}}{\Delta t}
+        \right)
+        \right)
+        \]
+    </div>
+
+    <p>
+        This helps prevent small-timestep configurations from receiving many more neural network updates per episode than large-timestep configurations.
+        The goal is to compare simulator configurations without unintentionally changing the amount of learning performed per unit simulated time.
+    </p>
+
+    <h3>PPO</h3>
+
+    <p>
+        Proximal Policy Optimization is a policy-gradient algorithm.
+        Unlike DQN, which learns a Q-function and derives actions from it,
+        PPO directly learns a parameterized policy.
+    </p>
+
+    <div class="equation-block">
+        \[
+        \pi_{\theta}(a|s)
+        \]
+    </div>
+
+    <p>
+        This quantity represents the probability of selecting action \(a\) given state \(s\).
+        PPO updates the policy to increase the probability of actions that produced better-than-expected outcomes,
+        while limiting how much the policy is allowed to change during one update.
+    </p>
+
+    <p>
+        PPO commonly uses an advantage estimate.
+        The advantage measures whether an action was better or worse than expected in a particular state.
+    </p>
+
+    <div class="equation-block">
+        \[
+        A_t = Q(s_t,a_t) - V(s_t)
+        \]
+    </div>
+
+    <p>
+        Here, \(V(s_t)\) is the state-value function.
+        It estimates the expected return from state \(s_t\), without conditioning on a specific action.
+    </p>
+
+    <p>
+        PPO uses a probability ratio between the new policy and the old policy:
+    </p>
+
+    <div class="equation-block">
+        \[
+        \rho_t(\theta) =
+        \frac{\pi_{\theta}(a_t|s_t)}
+        {\pi_{\theta_{\text{old}}}(a_t|s_t)}
+        \]
+    </div>
+
+    <p>
+        The clipped PPO objective is
+    </p>
+
+    <div class="equation-block">
+        \[
+        L^{\text{CLIP}}(\theta) =
+        \mathbb{E}_t
+        \left[
+        \min
+        \left(
+        \rho_t(\theta) A_t,
+        \text{clip}
+        \left(
+        \rho_t(\theta),
+        1-\epsilon,
+        1+\epsilon
+        \right) A_t
+        \right)
+        \right]
+        \]
+    </div>
+
+    <p>
+        The clipping term prevents the new policy from moving too far from the old policy in a single update.
+        This makes PPO more stable than a naive policy-gradient method.
+    </p>
+
+    <h3>Connection to This Project</h3>
+
+    <p>
+        The main question in this project is whether the learned behavior of an RL agent depends on the numerical simulator configuration used during training.
+        Since both DQN and PPO learn from trajectories generated by the environment,
+        any change in timestep or integrator can change the data distribution seen by the agent.
+    </p>
+
+    <p>
+        If different integrators produce slightly different trajectories, rewards, or termination behavior,
+        then the RL algorithm may learn policies that are specific to those numerical artifacts.
+        This motivates comparing performance across timestep and integrator settings,
+        rather than assuming that the simulator is only a neutral training tool.
+    </p>
+
+</section>
