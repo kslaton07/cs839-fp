@@ -148,3 +148,11 @@ body {
 
     border-radius: 12px;
 }
+
+.card p {
+    margin-bottom: 1.25rem;
+}
+
+.equation-block {
+    margin: 1.25rem 0;
+}
