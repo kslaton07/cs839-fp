@@ -73,23 +73,23 @@
         that the learned policy is useless even within the same simulator.
     </p>
 
-    <h3>Symplectic Euler Underperforms Despite Reasonable Accuracy</h3>
+    <h3>Implicit Euler Underperforms Despite Reasonable Accuracy</h3>
 
     <p>
-        Symplectic Euler performs poorly across nearly all timestep configurations, which is puzzling at first
+        Implicit Euler performs poorly across nearly all timestep configurations, which is puzzling at first
         given that it sits alongside Forward Euler on the accuracy curve and is theoretically a more principled
         integrator for Hamiltonian systems.
         The key is that integrator accuracy and integrator behavior are not the same thing.
     </p>
 
     <p>
-        Symplectic Euler does not gain energy like Forward Euler, nor does it conserve it exactly.
+        Implicit Euler does not gain energy like Forward Euler, nor does it conserve it exactly.
         At moderate to large timesteps it introduces numerical damping, systematically draining energy from the system.
         For a task that requires pumping energy into a pendulum to reach a target height, an integrator that
         removes energy is fundamentally at odds with what the task demands.
-        The agent trained under Symplectic Euler is trying to learn to swing up a pendulum that is fighting against
+        The agent trained under Implicit Euler is trying to learn to swing up a pendulum that is fighting against
         artificial dissipation, which requires more aggressive actions for the same result.
-        At larger timesteps the overdamping grows more severe, which explains why Symplectic Euler's performance
+        At larger timesteps the overdamping grows more severe, which explains why Implicit Euler's performance
         does not recover the way the other non-symplectic integrators do.
         This is a clear example of why raw truncation error is an incomplete picture: what matters for RL
         is not just how large the error is, but what kind of physical bias it introduces into the training environment.
