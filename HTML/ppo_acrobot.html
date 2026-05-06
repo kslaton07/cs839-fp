@@ -1,7 +1,212 @@
 <section id="results-ppo-acrobot" class="card">
     <h2>Results: PPO on Acrobot</h2>
 
+    <h3>Overview</h3>
+
     <p>
-        Add plots and discussion here.
+        The broad trends observed with DQN on Acrobot carry over to PPO: Forward Euler benefits from
+        artificial energy injection, Symplectic Euler is hampered by its overdamping, and intermediate
+        timesteps generally outperform the extremes.
+        The consistency of these trends across two fundamentally different learning algorithms is itself
+        a meaningful result, and it is discussed further below.
+        The heatmap of final returns across all configurations is shown first.
     </p>
+
+    <figure>
+        <img
+            src="PPO/results_PPO_acrobot/plots/heatmap_solve.png"
+            alt="Heatmap of PPO final returns on Acrobot across all integrator and timestep combinations."
+            style="max-width: 100%; border-radius: 8px;"
+        >
+        <figcaption>
+            Final mean episode return for PPO on Acrobot across all integrator and timestep configurations.
+        </figcaption>
+    </figure>
+
+    <h3>Universal Failure at the Smallest Timestep</h3>
+
+    <p>
+        One pattern that stands out more clearly in the PPO results is that nearly every integrator
+        performs extremely poorly at \(\Delta t = 0.01\), including Forward Euler, which was otherwise
+        a strong performer.
+        This is not a coincidence, and it is not caused by the integrator.
+        It is a consequence of how the discount factor interacts with the effective planning horizon
+        at very small timesteps.
+    </p>
+
+    <p>
+        With a fixed discount factor \(\gamma = 0.99\) per environment step, the effective planning
+        horizon of the agent is approximately
+    </p>
+
+    <div class="equation-block">
+        \[
+        \frac{1}{1 - \gamma} = \frac{1}{1 - 0.99} = 100 \text{ steps}
+        \]
+    </div>
+
+    <p>
+        At \(\Delta t = 0.01\), those 100 steps correspond to only one second of simulated time.
+        Acrobot requires the agent to plan a swing-up maneuver that unfolds over several seconds.
+        The reward for reaching the target height is so heavily discounted by the time it arrives
+        that it contributes almost nothing to the value estimates seen during training.
+        Every state looks approximately equally hopeless from the agent's perspective,
+        advantages collapse toward zero, and PPO has essentially no gradient signal to differentiate
+        good actions from bad ones.
+        The result is that all integrators fail at this timestep for the same reason,
+        regardless of their numerical properties.
+    </p>
+
+    <p>
+        This is a known issue in deep RL with fixed discount factors: the same \(\gamma\) that works
+        well at one timestep can completely blind the agent at a finer timestep.
+        A principled fix would be to scale \(\gamma\) with \(\Delta t\) so that the effective planning
+        horizon in simulated time remains constant across configurations.
+    </p>
+
+    <h3>Algorithm-Indifferent Trends</h3>
+
+    <p>
+        The fact that DQN and PPO produce qualitatively similar performance patterns across integrators
+        and timesteps is a notable finding in its own right.
+        DQN is off-policy, value-based, and replay-buffer dependent.
+        PPO is on-policy, policy-gradient based, and discards past experience after each update.
+        These are very different inductive biases, yet the ranking of integrators and the general
+        shape of performance versus timestep are broadly consistent between them.
+    </p>
+
+    <p>
+        This suggests that the dominant factor shaping learned behavior is not the RL algorithm itself,
+        but rather the physics of the training environment as mediated by the integrator and timestep.
+        The optimal policy for Acrobot is determined by the underlying task structure,
+        and different simulator configurations either make that policy easier or harder to discover
+        by introducing artificial energy dynamics.
+        An integrator that adds energy helps both DQN and PPO.
+        One that removes it hurts both.
+        The algorithm moderates the rate and stability of learning, but the integrator shapes
+        what there is to learn in the first place.
+        What ultimately matters for deployment, however, is not which configuration learns fastest
+        in simulation but which learned policy transfers most faithfully to the real system,
+        which is addressed in the transfer evaluation below.
+    </p>
+
+    <h3>Per-Timestep Training Curves</h3>
+
+    <figure>
+        <img
+            src="PPO/results_PPO_acrobot/plots/comparison_dt_0.01.png"
+            alt="PPO Acrobot training curves for all integrators at dt=0.01"
+            style="max-width: 100%; border-radius: 8px;"
+        >
+        <figcaption>\(\Delta t = 0.01\)</figcaption>
+    </figure>
+
+    <figure>
+        <img
+            src="PPO/results_PPO_acrobot/plots/comparison_dt_0.05.png"
+            alt="PPO Acrobot training curves for all integrators at dt=0.05"
+            style="max-width: 100%; border-radius: 8px;"
+        >
+        <figcaption>\(\Delta t = 0.05\)</figcaption>
+    </figure>
+
+    <figure>
+        <img
+            src="PPO/results_PPO_acrobot/plots/comparison_dt_0.1.png"
+            alt="PPO Acrobot training curves for all integrators at dt=0.1"
+            style="max-width: 100%; border-radius: 8px;"
+        >
+        <figcaption>\(\Delta t = 0.1\)</figcaption>
+    </figure>
+
+    <figure>
+        <img
+            src="PPO/results_PPO_acrobot/plots/comparison_dt_0.5.png"
+            alt="PPO Acrobot training curves for all integrators at dt=0.5"
+            style="max-width: 100%; border-radius: 8px;"
+        >
+        <figcaption>\(\Delta t = 0.5\)</figcaption>
+    </figure>
+
+    <figure>
+        <img
+            src="PPO/results_PPO_acrobot/plots/comparison_dt_1.png"
+            alt="PPO Acrobot training curves for all integrators at dt=1"
+            style="max-width: 100%; border-radius: 8px;"
+        >
+        <figcaption>\(\Delta t = 1\)</figcaption>
+    </figure>
+
+    <figure>
+        <img
+            src="PPO/results_PPO_acrobot/plots/comparison_dt_1.5.png"
+            alt="PPO Acrobot training curves for all integrators at dt=1.5"
+            style="max-width: 100%; border-radius: 8px;"
+        >
+        <figcaption>\(\Delta t = 1.5\)</figcaption>
+    </figure>
+
+    <figure>
+        <img
+            src="PPO/results_PPO_acrobot/plots/comparison_dt_2.png"
+            alt="PPO Acrobot training curves for all integrators at dt=2"
+            style="max-width: 100%; border-radius: 8px;"
+        >
+        <figcaption>\(\Delta t = 2\)</figcaption>
+    </figure>
+
+    <h3>Transfer Evaluation</h3>
+
+    <p>
+        Each trained PPO policy was evaluated on the same ground truth environment used for DQN:
+        RK4 at \(\Delta t = 0.01\).
+        The transfer heatmap is shown below.
+    </p>
+
+    <figure>
+        <img
+            src="PPO/results_PPO_acrobot/plots/transfer_heatmap.png"
+            alt="Heatmap of PPO transfer reward on Acrobot evaluated on RK4 dt=0.01 ground truth."
+            style="max-width: 100%; border-radius: 8px;"
+        >
+        <figcaption>
+            Transfer reward for PPO policies trained under each integrator and timestep configuration,
+            evaluated on a ground truth simulator using RK4 at \(\Delta t = 0.01\).
+        </figcaption>
+    </figure>
+
+    <p>
+        PPO's transfer results are noticeably stronger than DQN's overall.
+        Several configurations achieve transfer rewards in the range of \(-15\) to \(-25\),
+        and the number of completely failed transfers (reward of \(-100\)) is lower.
+        A likely explanation is the structural difference between what each algorithm actually learns.
+        DQN learns a Q-function: a mapping from state-action pairs to expected return values
+        that are calibrated to the specific reward magnitudes and discount structure of the training environment.
+        When the simulator changes at evaluation time, those absolute value estimates may mis-rank actions
+        because the expected returns under the new dynamics differ from what the Q-function was fitted to.
+        PPO, by contrast, learns a direct policy parameterized as a probability distribution over actions.
+        The policy is trained to improve relative to a baseline through advantage estimation,
+        which is less sensitive to the absolute scale of returns.
+        A policy that learned to swing the arm in a particular direction because that direction yielded
+        better-than-average outcomes is more likely to remain useful under slightly different dynamics
+        than a Q-function whose absolute value estimates depend on the precise reward trajectory.
+    </p>
+
+    <p>
+        One particularly interesting pattern is that Implicit Euler maintains reasonable transfer performance
+        even at the largest timesteps (\(\Delta t = 1, 1.5, 2\)), a window where nearly all other
+        integrators collapse to \(-100\).
+        Implicit Euler's numerical dissipation, which hurts its in-training performance, may
+        coincidentally produce more conservative and generalizable policies: an agent that has learned
+        to swing up a pendulum that is fighting artificial damping must apply more deliberate and
+        sustained actions, and that behavioral pattern may translate more robustly to the ground truth
+        environment than policies that relied on energy-inflating artifacts.
+    </p>
+
+    <p>
+        As with the DQN transfer analysis, it bears repeating that this is not a true sim-to-real evaluation.
+        The ground truth is still a simulated environment, and any conclusions about physical deployability
+        would require validation on real hardware.
+    </p>
+
 </section>
